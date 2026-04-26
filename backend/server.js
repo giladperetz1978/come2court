@@ -26,8 +26,8 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((item) => item.trim().toLowerCase())
   .filter(Boolean);
-const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || '').trim();
-const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || '').trim();
+const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || 'gilad').trim();
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || 'admin').trim();
 const ADMIN_TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 const REGISTRATION_LEAD_HOURS = Number(process.env.REGISTRATION_LEAD_HOURS || 24);
 const REGISTRATION_LEAD_MS = REGISTRATION_LEAD_HOURS * 60 * 60 * 1000;

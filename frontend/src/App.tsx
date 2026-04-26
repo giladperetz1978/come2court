@@ -247,9 +247,10 @@ function App() {
   const [isEditingGame, setIsEditingGame] = useState(false)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [adminUsername, setAdminUsername] = useState('')
+  const [adminUsername, setAdminUsername] = useState('gilad')
   const [adminPassword, setAdminPassword] = useState('')
   const [adminToken, setAdminToken] = useState<string>(() => readStoredAdminToken())
+  const [authTab, setAuthTab] = useState<'google' | 'admin'>('google')
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
 
   const registeredUserId = useMemo(() => readStoredUserId(), [])
@@ -641,6 +642,31 @@ function App() {
 
       <section className="grid">
         {!user && (
+          <article className="card full-width">
+            <div className="auth-tabs" role="tablist" aria-label="כניסה">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authTab === 'google'}
+                className={`auth-tab ${authTab === 'google' ? 'auth-tab-active' : ''}`}
+                onClick={() => setAuthTab('google')}
+              >
+                כניסה עם Google
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authTab === 'admin'}
+                className={`auth-tab ${authTab === 'admin' ? 'auth-tab-active' : ''}`}
+                onClick={() => setAuthTab('admin')}
+              >
+                כניסת ADMIN
+              </button>
+            </div>
+          </article>
+        )}
+
+        {!user && authTab === 'google' && (
           <article className="card">
             <h2>כניסה עם Google</h2>
             <p className="muted">לאחר הכניסה יש להשלים שם פרטי ושם משפחה כדי להופיע ברשימת הנרשמים בצורה תקינה.</p>
@@ -663,7 +689,7 @@ function App() {
           </article>
         )}
 
-        {apiConfig?.adminLoginEnabled && !hasAdminSession && (
+        {!hasAdminSession && authTab === 'admin' && (
           <article className="card">
             <h2>כניסת אדמין</h2>
             <p className="muted">כניסה זו מיועדת לניהול משחק קיים (עריכה/מחיקה).</p>
