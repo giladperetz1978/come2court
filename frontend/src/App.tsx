@@ -251,6 +251,8 @@ function App() {
   const [success, setSuccess] = useState('')
   const [googleReady, setGoogleReady] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [reminderBanner, setReminderBanner] = useState<string | null>(null)
   const [gameForm, setGameForm] = useState<GameFormState>(() => createEmptyGameForm())
   const [isEditingGame, setIsEditingGame] = useState(false)
   const [editingGameId, setEditingGameId] = useState<number | null>(null)
@@ -277,6 +279,30 @@ function App() {
   useEffect(() => {
     clearLegacyStorage()
   }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now()
+      setNowMs(now)
+
+      const upcoming = [...upcomingGames]
+      if (upcoming.length === 0) return
+
+      for (const g of upcoming) {
+        const deadline = new Date(g.registrationDeadline).getTime()
+        const diffMin = Math.round((deadline - now) / 60000)
+        if (diffMin <= 30 && diffMin > -10) {
+          const label = diffMin > 0 ? `${diffMin} דקות להרשמה למשחק ${g.title}!` : `הרשמה למשחק ${g.title} נסגרה!`
+          setReminderBanner(label)
+          return
+        }
+      }
+
+      setReminderBanner(null)
+    }, 30000)
+
+    return () => clearInterval(id)
+  }, [upcomingGames])
 
   useEffect(() => {
     const onBeforeInstallPrompt = (event: Event) => {
@@ -390,7 +416,7 @@ function App() {
     })
 
     setGoogleReady(true)
-  }, [apiConfig?.googleClientId, user])
+  }, [apiConfig?.googleClientId, user, adminToken])
 
   useEffect(() => {
     const syncPushState = async () => {
@@ -566,7 +592,7 @@ function App() {
           title: gameForm.title,
           location: gameForm.location,
           notes: gameForm.notes,
-          gameDate: gameForm.gameDate,
+          gameDate: new Date(gameForm.gameDate).toISOString(),
         }
         const response = await apiRequest<{ game: Game }>(`/api/games/${targetGameId}`, {
           method: 'PATCH',
@@ -600,7 +626,7 @@ function App() {
         title: gameForm.title,
         location: gameForm.location,
         notes: gameForm.notes,
-        gameDate: gameForm.gameDate,
+        gameDate: new Date(gameForm.gameDate).toISOString(),
       }
 
       const response = await apiRequest<{ game: Game; message?: string }>('/api/games', {
@@ -772,6 +798,17 @@ function App() {
   const nextGame = upcomingGames.find((item) => item.id !== spotlightGame?.id) ?? null
   const rosterGames = [spotlightGame, nextGame].filter((item): item is Game => Boolean(item))
   const isUserInGame = Boolean(user && game?.players.some((item) => item.userId === user.id))
+
+  function deadlineCountdown(isoDeadline: string): { label: string; urgent: boolean } {
+    const diffMs = new Date(isoDeadline).getTime() - nowMs
+    if (diffMs <= 0) return { label: 'ההרשמה נסגרה', urgent: true }
+    const totalMin = Math.floor(diffMs / 60000)
+    if (totalMin < 60) return { label: `${totalMin} דקות להרשמה`, urgent: totalMin < 30 }
+    const hours = Math.floor(totalMin / 60)
+    const mins = totalMin % 60
+    const label = mins > 0 ? `${hours} שעות ו-${mins} דקות להרשמה` : `${hours} שעות להרשמה`
+    return { label, urgent: hours < 2 }
+  }
   const canShowCreateForm = Boolean((user || hasAdminSession) && upcomingGames.length < maxActiveGames)
   const canShowAdminEditor = Boolean((user?.isAdmin || hasAdminSession) && upcomingGames.length)
   const isGoogleConfigured = Boolean(apiConfig?.googleClientId)
@@ -781,6 +818,11 @@ function App() {
 
   return (
     <main className="app-shell">
+      {reminderBanner && (
+        <div className="reminder-banner" onClick={() => setReminderBanner(null)}>
+          ⏰ {reminderBanner} <span className="reminder-close">✕</span>
+        </div>
+      )}
       <section className="hero hero-sport">
         <div className="topbar">
           <div className="admin-corner">
@@ -956,6 +998,15 @@ function App() {
               </div>
 
               {spotlightGame.notes && <p className="muted">{spotlightGame.notes}</p>}
+
+              {spotlightGame.registrationDeadline && (() => {
+                const { label, urgent } = deadlineCountdown(spotlightGame.registrationDeadline)
+                return (
+                  <p className={`countdown-pill ${urgent ? 'countdown-urgent' : ''}`}>
+                    {label}
+                  </p>
+                )
+              })()}
 
               {user && game && game.viewerPosition && (
                 <p className="message message-ok inline-message">

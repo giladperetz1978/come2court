@@ -73,7 +73,7 @@ input {
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(1.6rem, 4vw, 2.45rem);
+  font-size: clamp(1.05rem, 2.5vw, 1.45rem);
   line-height: 1;
   letter-spacing: 0.02em;
 }
@@ -465,6 +465,56 @@ input {
 
 .roster-meta {
   margin-bottom: 12px;
+}
+
+.countdown-pill {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  color: var(--brand-strong);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.countdown-urgent {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.35);
+  color: #c2410c;
+  animation: pulse-reminder 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-reminder {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.reminder-banner {
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  z-index: 999;
+  background: linear-gradient(90deg, #ea580c, #f97316);
+  color: #fff;
+  text-align: center;
+  padding: 14px 40px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(234, 88, 12, 0.45);
+  animation: slide-in 0.3s ease;
+}
+
+@keyframes slide-in {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+.reminder-close {
+  margin-right: 12px;
+  opacity: 0.8;
 }
 
 @media (min-width: 900px) {
