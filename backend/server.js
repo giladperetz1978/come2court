@@ -941,23 +941,9 @@ async function startServer() {
     res.status(404).json({ message: 'Endpoint לא נמצא.' });
   });
 
-  // Try to load HTTPS certificates, fall back to HTTP if not available
-  const certPath = path.join(DB_DIR, 'cert.pem');
-  const keyPath = path.join(DB_DIR, 'key.pem');
-  const useHttps = fs.existsSync(certPath) && fs.existsSync(keyPath);
-
-  if (useHttps) {
-    const cert = fs.readFileSync(certPath, 'utf8');
-    const key = fs.readFileSync(keyPath, 'utf8');
-    const httpsServer = https.createServer({ cert, key }, app);
-    httpsServer.listen(PORT, () => {
-      console.log(`API listening on https://localhost:${PORT}`);
-    });
-  } else {
-    app.listen(PORT, () => {
-      console.log(`API listening on http://localhost:${PORT}`);
-    });
-  }
+  app.listen(PORT, () => {
+    console.log(`API listening on http://localhost:${PORT}`);
+  });
 
   startReminderScheduler();
 }
