@@ -55,6 +55,11 @@ type ApiConfig = {
   adminLoginEnabled: boolean
 }
 
+type UpcomingGamesResponse = {
+  games: Game[]
+  maxActiveGames: number
+}
+
 type GameFormState = {
   title: string
   location: string
@@ -237,6 +242,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [game, setGame] = useState<Game | null>(null)
+  const [upcomingGames, setUpcomingGames] = useState<Game[]>([])
+  const [maxActiveGames, setMaxActiveGames] = useState(2)
   const [apiConfig, setApiConfig] = useState<ApiConfig | null>(null)
   const [installPrompt, setInstallPrompt] = useState<any>(null)
   const [isBusy, setIsBusy] = useState(false)
@@ -291,15 +298,15 @@ function App() {
             setUser(userResponse.user)
             setFirstName(userResponse.user.firstName || '')
             setLastName(userResponse.user.lastName || '')
-            await refreshGame(userResponse.user.id)
+            await refreshAll(userResponse.user.id)
           } catch (_error) {
             clearStoredUserId()
             clearStoredAdminToken()
             setAdminToken('')
-            await refreshGame()
+            await refreshAll()
           }
         } else {
-          await refreshGame()
+          await refreshAll()
         }
       } catch (requestError: unknown) {
         const errorMessage =
@@ -352,7 +359,7 @@ function App() {
         setFirstName(authResponse.user.firstName || '')
         setLastName(authResponse.user.lastName || '')
         writeStoredUserId(authResponse.user.id)
-        await refreshGame(authResponse.user.id)
+        await refreshAll(authResponse.user.id)
         if (authResponse.user.firstName && authResponse.user.lastName) {
           setSuccess('נכנסת בהצלחה עם Google.')
         } else {
@@ -387,6 +394,17 @@ function App() {
     const query = userId ? `?userId=${userId}` : ''
     const response = await apiRequest<{ game: Game | null }>(`/api/games/current${query}`)
     setGame(response.game)
+  }
+
+  async function refreshUpcomingGames(userId?: number) {
+    const query = userId ? `?userId=${userId}` : ''
+    const response = await apiRequest<UpcomingGamesResponse>(`/api/games/upcoming${query}`)
+    setUpcomingGames(response.games || [])
+    setMaxActiveGames(response.maxActiveGames || 2)
+  }
+
+  async function refreshAll(userId?: number) {
+    await Promise.all([refreshGame(userId), refreshUpcomingGames(userId)])
   }
 
   function logout() {
@@ -475,6 +493,7 @@ function App() {
         body: JSON.stringify({ userId: user.id }),
       })
       setGame(response.game)
+      await refreshUpcomingGames(user.id)
       setSuccess('נרשמת בהצלחה למשחק.')
     } catch (requestError: unknown) {
       const errorMessage = requestError instanceof Error ? requestError.message : 'לא ניתן להצטרף כרגע.'
@@ -496,6 +515,7 @@ function App() {
         body: JSON.stringify({ userId: user.id }),
       })
       setGame(response.game)
+      await refreshUpcomingGames(user.id)
       setSuccess('הוסרת מהרישום למשחק.')
     } catch (requestError: unknown) {
       const errorMessage = requestError instanceof Error ? requestError.message : 'לא ניתן להסיר כרגע.'
@@ -529,6 +549,7 @@ function App() {
           body: JSON.stringify(payload),
         })
         setGame(response.game)
+        await refreshUpcomingGames(user.id)
         setIsEditingGame(false)
         setSuccess('פרטי המשחק עודכנו בהצלחה.')
       } else {
@@ -537,6 +558,7 @@ function App() {
           body: JSON.stringify(payload),
         })
         setGame(response.game)
+        await refreshUpcomingGames(user.id)
         setSuccess(
           response.message || 'המשחק נוצר. שים לב: גם מי שיצר את המשחק חייב להירשם אליו בנפרד.'
         )
@@ -566,6 +588,7 @@ function App() {
       setGame(null)
       setGameForm(createEmptyGameForm())
       setIsEditingGame(false)
+      await refreshUpcomingGames(user?.id)
       setSuccess('המשחק נמחק בהצלחה.')
     } catch (requestError: unknown) {
       const errorMessage = requestError instanceof Error ? requestError.message : 'מחיקת המשחק נכשלה.'
@@ -615,6 +638,28 @@ function App() {
     }
   }
 
+  async function sendTestPush() {
+    if (!user) {
+      return
+    }
+
+    setError('')
+    setSuccess('')
+    setIsBusy(true)
+    try {
+      const response = await apiRequest<{ sent: number; failed: number }>('/api/push/test', {
+        method: 'POST',
+        body: JSON.stringify({ userId: user.id }),
+      })
+      setSuccess(`נשלחה התראת בדיקה. הצליחו: ${response.sent}, נכשלו: ${response.failed}.`)
+    } catch (requestError: unknown) {
+      const errorMessage = requestError instanceof Error ? requestError.message : 'שליחת בדיקת התראה נכשלה.'
+      setError(errorMessage)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function promptInstall() {
     if (!installPrompt) {
       setError('התקנה אוטומטית לא זמינה כרגע בדפדפן זה.')
@@ -627,7 +672,7 @@ function App() {
   }
 
   const isUserInGame = Boolean(user && game?.players.some((item) => item.userId === user.id))
-  const canShowCreateForm = Boolean(user && !game)
+  const canShowCreateForm = Boolean(user && upcomingGames.length < maxActiveGames)
   const canShowAdminEditor = Boolean((user?.isAdmin || hasAdminSession) && game)
   const isGoogleConfigured = Boolean(apiConfig?.googleClientId)
   const isSecureOriginForGoogle =
@@ -758,6 +803,14 @@ function App() {
                 onClick={subscribeForPush}
               >
                 הפעלת תזכורות Push
+              </button>
+
+              <button
+                disabled={isBusy || !apiConfig?.vapidPublicKey}
+                className="cta cta-soft"
+                onClick={sendTestPush}
+              >
+                בדיקת התראה לטלפון
               </button>
 
               <button disabled={isBusy} className="cta cta-soft" onClick={logout}>
@@ -905,6 +958,27 @@ function App() {
           ) : (
             <p className="muted">אין כרגע משחק מתוכנן. כל משתתף רשום יכול ליצור משחק חדש.</p>
           )}
+        </article>
+
+        <article className="card full-width">
+          <h3>משחקים עתידיים פעילים</h3>
+          <p className="muted">אפשר להחזיק עד {maxActiveGames} משחקים עתידיים במקביל.</p>
+          <ul className="players">
+            {upcomingGames.length ? (
+              upcomingGames.map((upcoming) => (
+                <li key={upcoming.id}>
+                  <span>
+                    <strong>{upcoming.title}</strong> | {new Date(upcoming.gameDate).toLocaleString('he-IL')}
+                  </span>
+                  <span className={`tag ${upcoming.status === 'WAITING' || upcoming.status === 'LOCKED' ? 'tag-wait' : 'tag-play'}`}>
+                    {getStatusLabel(upcoming.status)}
+                  </span>
+                </li>
+              ))
+            ) : (
+              <li className="muted">אין כרגע משחקים עתידיים.</li>
+            )}
+          </ul>
         </article>
 
         <article className="card full-width">

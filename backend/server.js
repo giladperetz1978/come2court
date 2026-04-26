@@ -31,6 +31,7 @@ const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || 'admin').trim();
 const ADMIN_TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 const REGISTRATION_LEAD_HOURS = Number(process.env.REGISTRATION_LEAD_HOURS || 24);
 const REGISTRATION_LEAD_MS = REGISTRATION_LEAD_HOURS * 60 * 60 * 1000;
+const MAX_ACTIVE_GAMES = 2;
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
@@ -312,16 +313,39 @@ function ensureAdmin(userId, adminToken = '') {
 }
 
 function getUpcomingGameId() {
-  const row = get(
+  const ids = getUpcomingGameIds(1);
+  return ids.length ? ids[0] : null;
+}
+
+function getUpcomingGameIds(limit = MAX_ACTIVE_GAMES) {
+  const rows = all(
     `SELECT id
      FROM games
      WHERE is_cancelled = 0 AND game_date >= ?
      ORDER BY game_date ASC
-     LIMIT 1`,
+     LIMIT ?`,
+    [nowIso(), limit]
+  );
+
+  return rows.map((row) => Number(row.id));
+}
+
+function getUpcomingGames(viewerUserId = null, limit = MAX_ACTIVE_GAMES) {
+  const gameIds = getUpcomingGameIds(limit);
+  gameIds.forEach((gameId) => recalculateGame(gameId));
+  return gameIds.map((gameId) => serializeGame(gameId, viewerUserId)).filter(Boolean);
+}
+
+function getUpcomingGamesCount() {
+  const row = get(
+    `SELECT COUNT(*) AS count
+     FROM games
+     WHERE is_cancelled = 0 AND game_date >= ?
+    `,
     [nowIso()]
   );
 
-  return row ? Number(row.id) : null;
+  return row ? Number(row.count) : 0;
 }
 
 function getGameRow(gameId) {
@@ -854,6 +878,14 @@ async function startServer() {
     return res.json({ game: serializeGame(gameId, userId) });
   });
 
+  app.get('/api/games/upcoming', (req, res) => {
+    const userId = req.query.userId ? Number(req.query.userId) : null;
+    return res.json({
+      games: getUpcomingGames(userId, MAX_ACTIVE_GAMES),
+      maxActiveGames: MAX_ACTIVE_GAMES,
+    });
+  });
+
   app.post('/api/games', (req, res) => {
     const userId = Number(req.body?.userId);
     const requester = getRequester(userId);
@@ -866,9 +898,9 @@ async function startServer() {
       return res.status(409).json({ message: profileCheck.message });
     }
 
-    if (getUpcomingGameId()) {
+    if (getUpcomingGamesCount() >= MAX_ACTIVE_GAMES) {
       return res.status(409).json({
-        message: 'כבר קיים משחק פעיל במערכת. רק אדמין יכול לערוך או למחוק אותו.',
+        message: `ניתן להחזיק עד ${MAX_ACTIVE_GAMES} משחקים פעילים עתידיים במקביל.`,
       });
     }
 
@@ -1105,6 +1137,43 @@ async function startServer() {
 
     persistDb();
     return res.status(201).json({ ok: true });
+  });
+
+  app.post('/api/push/test', async (req, res) => {
+    const userId = Number(req.body?.userId);
+    const requester = getRequester(userId);
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return res.status(409).json({ message: 'Push אינו מוגדר בשרת (חסרים VAPID keys).' });
+    }
+
+    const subscriptions = all(
+      'SELECT id, payload FROM push_subscriptions WHERE user_id = ? ORDER BY id ASC',
+      [requester.user.id]
+    );
+    if (!subscriptions.length) {
+      return res.status(404).json({ message: 'לא נמצאו subscriptions למשתמש הזה.' });
+    }
+
+    let sent = 0;
+    let failed = 0;
+    for (const subscription of subscriptions) {
+      try {
+        await sendPushNotification(JSON.parse(subscription.payload), {
+          title: 'בדיקת התראה',
+          message: `ההתראות עובדות עבור ${requester.user.name}.`,
+          kind: 'TEST',
+        });
+        sent += 1;
+      } catch (_error) {
+        failed += 1;
+      }
+    }
+
+    return res.json({ sent, failed });
   });
 
   app.post('/api/reminders/dispatch', async (req, res) => {
