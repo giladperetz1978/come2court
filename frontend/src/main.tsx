@@ -3,11 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
-// Redirect GitHub Pages to VPS backend
-const isGithubPages = window.location.hostname.endsWith('github.io')
-const vpsUrl = 'http://144.91.96.77:8787'
-if (isGithubPages) {
-  window.location.replace(vpsUrl)
+const isGithubPagesHost = window.location.hostname.endsWith('github.io')
+const publicAppUrl = String(import.meta.env.VITE_PUBLIC_APP_URL || 'https://144.91.96.77.sslip.io').replace(/\/$/, '')
+
+if (isGithubPagesHost && publicAppUrl) {
+  window.location.replace(`${publicAppUrl}/`)
   throw new Error('Redirecting to VPS...')
 }
 

@@ -33,12 +33,21 @@ jobs:
           script: |
             set -e
             export DEBIAN_FRONTEND=noninteractive
+            PUBLIC_APP_DOMAIN=144.91.96.77.sslip.io
             if command -v apt-get >/dev/null 2>&1; then
               apt-get update -y
-              apt-get install -y curl git ca-certificates
+              apt-get install -y curl git ca-certificates gnupg
               if ! command -v node >/dev/null 2>&1; then
                 curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
                 apt-get install -y nodejs
+              fi
+              if ! command -v caddy >/dev/null 2>&1; then
+                apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+                mkdir -p /etc/apt/keyrings
+                curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /etc/apt/keyrings/caddy-stable-archive-keyring.gpg
+                curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt | tee /etc/apt/sources.list.d/caddy-stable.list
+                apt-get update -y
+                apt-get install -y caddy
               fi
             fi
             mkdir -p ~/apps/yomshishi
@@ -56,9 +65,13 @@ jobs:
             if command -v ufw >/dev/null 2>&1; then
               ufw allow 22/tcp || true
               ufw allow 8787/tcp || true
+              ufw allow 80/tcp || true
+              ufw allow 443/tcp || true
             elif command -v firewall-cmd >/dev/null 2>&1; then
               firewall-cmd --permanent --add-port=22/tcp || true
               firewall-cmd --permanent --add-port=8787/tcp || true
+              firewall-cmd --permanent --add-port=80/tcp || true
+              firewall-cmd --permanent --add-port=443/tcp || true
               firewall-cmd --reload || true
             fi
             cd ~/apps/yomshishi/frontend
@@ -79,20 +92,17 @@ jobs:
             if [ -n "$GOOGLE_CLIENT_ID" ]; then upsert_env GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"; fi
             if [ -n "$APPROVED_EMAILS" ]; then upsert_env APPROVED_EMAILS "$APPROVED_EMAILS"; fi
             if [ -n "$ADMIN_EMAILS" ]; then upsert_env ADMIN_EMAILS "$ADMIN_EMAILS"; fi
+            upsert_env FRONTEND_ORIGIN "https://$PUBLIC_APP_DOMAIN,http://localhost:5173"
             npm ci --omit=dev
-            # Generate self-signed SSL certificate if it doesn't exist
-            mkdir -p ~/apps/yomshishi/backend/data
-            CERT_FILE=~/apps/yomshishi/backend/data/cert.pem
-            KEY_FILE=~/apps/yomshishi/backend/data/key.pem
-            if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
-              openssl req -x509 -newkey rsa:2048 -keyout "$KEY_FILE" -out "$CERT_FILE" -days 365 -nodes -subj "/CN=144.91.96.77" 2>/dev/null || true
-            fi
             pm2 delete yomshishi-backend || true
             pm2 start ~/apps/yomshishi/backend/server.js --name yomshishi-backend
             pm2 save
+            printf '%s\n' "$PUBLIC_APP_DOMAIN {" "  reverse_proxy 127.0.0.1:8787" "}" >/etc/caddy/Caddyfile
+            systemctl enable caddy || true
+            systemctl restart caddy
             HEALTH_OK=0
             for i in $(seq 1 20); do
-              if curl --silent --fail --insecure https://127.0.0.1:8787/api/health >/dev/null 2>&1 || curl --silent --fail http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
+              if curl --silent --fail http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
                 HEALTH_OK=1
                 break
               fi
