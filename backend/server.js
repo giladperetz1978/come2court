@@ -202,12 +202,15 @@ function ensureColumn(tableName, columnName, definition) {
 }
 
 function getUserRow(userId) {
-  return get('SELECT id, name, email, first_name, last_name FROM users WHERE id = ?', [userId]);
+  return get(
+    'SELECT id, name, email, first_name, last_name, profile_completed FROM users WHERE id = ?',
+    [userId]
+  );
 }
 
 function upsertUser(name, email, firstName = '', lastName = '') {
   const existingUser = get(
-    'SELECT id, name, email, first_name, last_name FROM users WHERE email = ?',
+    'SELECT id, name, email, first_name, last_name, profile_completed FROM users WHERE email = ?',
     [email]
   );
   const mergedName = composeDisplayName(firstName, lastName, name);
@@ -231,14 +234,17 @@ function upsertUser(name, email, firstName = '', lastName = '') {
     return getUserRow(Number(existingUser.id));
   }
 
-  run('INSERT INTO users (name, email, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', [
-    mergedName,
-    email,
-    String(firstName || ''),
-    String(lastName || ''),
-    nowIso(),
-    nowIso(),
-  ]);
+  run(
+    'INSERT INTO users (name, email, first_name, last_name, profile_completed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+    [
+      mergedName,
+      email,
+      String(firstName || ''),
+      String(lastName || ''),
+      nowIso(),
+      nowIso(),
+    ]
+  );
   const row = get('SELECT last_insert_rowid() AS id');
   persistDb();
   return getUserRow(Number(row.id));
@@ -252,8 +258,20 @@ function serializeUser(user) {
     name: composeDisplayName(firstName, lastName, user.name),
     firstName,
     lastName,
+    profileCompleted: Number(user.profile_completed) === 1,
     email: user.email,
     isAdmin: isAdminEmail(user.email),
+  };
+}
+
+function ensureProfileCompleted(user) {
+  if (Number(user.profile_completed) === 1) {
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    message: 'לפני פעולת משחק יש להשלים שם פרטי ושם משפחה ולשמור.',
   };
 }
 
@@ -579,6 +597,7 @@ async function bootstrapDatabase() {
       email TEXT NOT NULL UNIQUE,
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
+      profile_completed INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -631,6 +650,7 @@ async function bootstrapDatabase() {
   ensureColumn('games', 'reminder_sent_at', 'TEXT');
   ensureColumn('users', 'first_name', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('users', 'last_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('users', 'profile_completed', 'INTEGER NOT NULL DEFAULT 0');
 
   const users = all('SELECT id, name, first_name, last_name FROM users');
   users.forEach((user) => {
@@ -785,6 +805,10 @@ async function startServer() {
       nowIso(),
       requester.user.id,
     ]);
+    run('UPDATE users SET profile_completed = 1, updated_at = ? WHERE id = ?', [
+      nowIso(),
+      requester.user.id,
+    ]);
     persistDb();
 
     const updated = getUserRow(requester.user.id);
@@ -835,6 +859,11 @@ async function startServer() {
     const requester = getRequester(userId);
     if (requester.error) {
       return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const profileCheck = ensureProfileCompleted(requester.user);
+    if (!profileCheck.ok) {
+      return res.status(409).json({ message: profileCheck.message });
     }
 
     if (getUpcomingGameId()) {
@@ -958,6 +987,11 @@ async function startServer() {
     const requester = getRequester(userId);
     if (requester.error) {
       return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const profileCheck = ensureProfileCompleted(requester.user);
+    if (!profileCheck.ok) {
+      return res.status(409).json({ message: profileCheck.message });
     }
 
     const gameId = getUpcomingGameId();

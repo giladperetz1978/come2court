@@ -9,6 +9,7 @@ type User = {
   name: string
   firstName: string
   lastName: string
+  profileCompleted: boolean
   email: string
   isAdmin: boolean
 }
@@ -88,8 +89,10 @@ declare global {
 
 const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim()
 const API_BASE = configuredApiBase ? configuredApiBase.replace(/\/$/, '') : ''
-const USER_ID_KEY = 'yomshishi_user_id'
-const ADMIN_TOKEN_KEY = 'yomshishi_admin_token'
+const USER_ID_KEY = 'yomshishi_user_id_v2'
+const ADMIN_TOKEN_KEY = 'yomshishi_admin_token_v2'
+const LEGACY_USER_ID_KEY = 'yomshishi_user_id'
+const LEGACY_ADMIN_TOKEN_KEY = 'yomshishi_admin_token'
 
 function readStoredUserId(): number | null {
   try {
@@ -137,6 +140,15 @@ function writeStoredAdminToken(token: string) {
 function clearStoredAdminToken() {
   try {
     localStorage.removeItem(ADMIN_TOKEN_KEY)
+  } catch (_error) {
+    // Ignore storage failures in locked-down browsers.
+  }
+}
+
+function clearLegacyStorage() {
+  try {
+    localStorage.removeItem(LEGACY_USER_ID_KEY)
+    localStorage.removeItem(LEGACY_ADMIN_TOKEN_KEY)
   } catch (_error) {
     // Ignore storage failures in locked-down browsers.
   }
@@ -250,7 +262,11 @@ function App() {
   }, [])
 
   const hasAdminSession = Boolean(adminToken)
-  const needsProfileCompletion = Boolean(user && (!user.firstName || !user.lastName))
+  const needsProfileCompletion = Boolean(user && !user.profileCompleted)
+
+  useEffect(() => {
+    clearLegacyStorage()
+  }, [])
 
   useEffect(() => {
     const onBeforeInstallPrompt = (event: Event) => {
@@ -269,11 +285,18 @@ function App() {
         setApiConfig(configResponse)
 
         if (registeredUserId && Number.isInteger(registeredUserId) && registeredUserId > 0) {
-          const userResponse = await apiRequest<{ user: User }>(`/api/users/${registeredUserId}`)
-          setUser(userResponse.user)
-          setFirstName(userResponse.user.firstName || '')
-          setLastName(userResponse.user.lastName || '')
-          await refreshGame(userResponse.user.id)
+          try {
+            const userResponse = await apiRequest<{ user: User }>(`/api/users/${registeredUserId}`)
+            setUser(userResponse.user)
+            setFirstName(userResponse.user.firstName || '')
+            setLastName(userResponse.user.lastName || '')
+            await refreshGame(userResponse.user.id)
+          } catch (_error) {
+            clearStoredUserId()
+            clearStoredAdminToken()
+            setAdminToken('')
+            await refreshGame()
+          }
         } else {
           await refreshGame()
         }
