@@ -1,0 +1,24 @@
+{
+  "name": "ניהול משחק יום שישי 3x3",
+  "short_name": "YomShishi 3x3",
+  "description": "אפליקציית PWA לקבוצה סגורה לניהול משחקי 3x3, הרשמה ורשימות המתנה.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#0f172a",
+  "lang": "he",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
