@@ -11,7 +11,7 @@ const webPush = require('web-push');
 dotenv.config();
 
 const PORT = Number(process.env.PORT || 8787);
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173,https://giladperetz1978.github.io';
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 const FRONTEND_ORIGINS = FRONTEND_ORIGIN.split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);

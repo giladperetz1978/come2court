@@ -3,6 +3,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
+// Redirect GitHub Pages to VPS backend
+const isGithubPages = window.location.hostname.endsWith('github.io')
+const vpsUrl = 'http://144.91.96.77:8787'
+if (isGithubPages) {
+  window.location.replace(vpsUrl)
+  throw new Error('Redirecting to VPS...')
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
