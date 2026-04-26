@@ -87,6 +87,36 @@ const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim()
 const API_BASE = configuredApiBase ? configuredApiBase.replace(/\/$/, '') : ''
 const USER_ID_KEY = 'yomshishi_user_id'
 
+function readStoredUserId(): number | null {
+  try {
+    const raw = localStorage.getItem(USER_ID_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = Number(raw)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+  } catch (_error) {
+    return null
+  }
+}
+
+function writeStoredUserId(userId: number) {
+  try {
+    localStorage.setItem(USER_ID_KEY, String(userId))
+  } catch (_error) {
+    // Ignore storage failures in locked-down browsers.
+  }
+}
+
+function clearStoredUserId() {
+  try {
+    localStorage.removeItem(USER_ID_KEY)
+  } catch (_error) {
+    // Ignore storage failures in locked-down browsers.
+  }
+}
+
 function getStatusLabel(status: GameStatus): string {
   switch (status) {
     case 'OPEN':
@@ -179,10 +209,7 @@ function App() {
   const [isEditingGame, setIsEditingGame] = useState(false)
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
 
-  const registeredUserId = useMemo(() => {
-    const raw = localStorage.getItem(USER_ID_KEY)
-    return raw ? Number(raw) : null
-  }, [])
+  const registeredUserId = useMemo(() => readStoredUserId(), [])
 
   useEffect(() => {
     const onBeforeInstallPrompt = (event: Event) => {
@@ -255,7 +282,7 @@ function App() {
           body: JSON.stringify({ idToken: response.credential }),
         })
         setUser(authResponse.user)
-        localStorage.setItem(USER_ID_KEY, String(authResponse.user.id))
+        writeStoredUserId(authResponse.user.id)
         await refreshGame(authResponse.user.id)
         setSuccess('נכנסת בהצלחה עם Google.')
       } catch (requestError: unknown) {
@@ -290,7 +317,7 @@ function App() {
   }
 
   function logout() {
-    localStorage.removeItem(USER_ID_KEY)
+    clearStoredUserId()
     setUser(null)
     setGame(null)
     setSuccess('התנתקת בהצלחה.')

@@ -61,7 +61,8 @@ jobs:
             npm run build
             cd ~/apps/yomshishi/backend
             npm ci --omit=dev
-            pm2 restart yomshishi-backend || pm2 start server.js --name yomshishi-backend
+            pm2 delete yomshishi-backend || true
+            pm2 start ~/apps/yomshishi/backend/server.js --name yomshishi-backend
             pm2 save
             HEALTH_OK=0
             for i in $(seq 1 20); do
