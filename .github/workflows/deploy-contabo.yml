@@ -80,12 +80,19 @@ jobs:
             if [ -n "$APPROVED_EMAILS" ]; then upsert_env APPROVED_EMAILS "$APPROVED_EMAILS"; fi
             if [ -n "$ADMIN_EMAILS" ]; then upsert_env ADMIN_EMAILS "$ADMIN_EMAILS"; fi
             npm ci --omit=dev
+            # Generate self-signed SSL certificate if it doesn't exist
+            mkdir -p ~/apps/yomshishi/backend/data
+            CERT_FILE=~/apps/yomshishi/backend/data/cert.pem
+            KEY_FILE=~/apps/yomshishi/backend/data/key.pem
+            if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
+              openssl req -x509 -newkey rsa:2048 -keyout "$KEY_FILE" -out "$CERT_FILE" -days 365 -nodes -subj "/CN=144.91.96.77" 2>/dev/null || true
+            fi
             pm2 delete yomshishi-backend || true
             pm2 start ~/apps/yomshishi/backend/server.js --name yomshishi-backend
             pm2 save
             HEALTH_OK=0
             for i in $(seq 1 20); do
-              if curl --silent --fail http://127.0.0.1:8787/api/health >/dev/null; then
+              if curl --silent --fail --insecure https://127.0.0.1:8787/api/health >/dev/null 2>&1 || curl --silent --fail http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
                 HEALTH_OK=1
                 break
               fi
