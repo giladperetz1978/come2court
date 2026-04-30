@@ -87,17 +87,7 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
-function ensureApproved(email) {
-  if (!APPROVED_EMAILS.length) {
-    return {
-      ok: false,
-      message:
-        'אין רשימת משתמשים מאושרת בשרת. יש להגדיר APPROVED_EMAILS בקובץ הסביבה.',
-    };
-  }
-  if (!APPROVED_EMAILS.includes(normalizeEmail(email))) {
-    return { ok: false, message: 'האימייל אינו בקבוצה הסגורה המאושרת.' };
-  }
+function ensureApproved(_email) {
   return { ok: true };
 }
 
