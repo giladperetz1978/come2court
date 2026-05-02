@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: yomshishi
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: cd frontend && npm ci && npm run build && cd ../backend && npm ci
+    startCommand: node backend/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: REGISTRATION_LOCK_HOUR
+        value: "20"
+    disk:
+      name: yomshishi-data
+      mountPath: /opt/render/project/src/backend/data
+      sizeGB: 1

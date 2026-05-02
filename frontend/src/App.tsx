@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type GameStatus = 'OPEN' | 'CONFIRMED' | 'WAITING' | 'LOCKED' | 'CANCELLED'
 type PlayerRole = 'PLAYING' | 'WAITING'
@@ -12,6 +12,19 @@ type User = {
   profileCompleted: boolean
   email: string
   isAdmin: boolean
+  isActive?: boolean
+}
+
+type PlayerOption = {
+  id: number
+  name: string
+}
+
+type AdminPlayer = {
+  id: number
+  name: string
+  isActive: boolean
+  createdAt: string
 }
 
 type Player = {
@@ -51,6 +64,7 @@ type ApiConfig = {
   vapidPublicKey: string
   closedGroupEnabled: boolean
   registrationLeadHours: number
+  registrationLockHour?: number
   googleClientId: string
   adminLoginEnabled: boolean
 }
@@ -67,37 +81,10 @@ type GameFormState = {
   gameDate: string
 }
 
-type GoogleCredentialResponse = {
-  credential: string
-}
-
-declare global {
-  interface Window {
-    google?: {
-      accounts?: {
-        id?: {
-          initialize: (params: {
-            client_id: string
-            callback: (response: GoogleCredentialResponse) => void
-            auto_select?: boolean
-            ux_mode?: 'popup' | 'redirect'
-          }) => void
-          renderButton: (
-            parent: HTMLElement,
-            options: { theme?: 'outline' | 'filled_blue'; size?: 'large' | 'medium'; text?: string }
-          ) => void
-        }
-      }
-    }
-  }
-}
-
 const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim()
 const API_BASE = configuredApiBase ? configuredApiBase.replace(/\/$/, '') : ''
-const USER_ID_KEY = 'yomshishi_user_id_v2'
-const ADMIN_TOKEN_KEY = 'yomshishi_admin_token_v2'
-const LEGACY_USER_ID_KEY = 'yomshishi_user_id'
-const LEGACY_ADMIN_TOKEN_KEY = 'yomshishi_admin_token'
+const USER_ID_KEY = 'yomshishi_user_id_v3'
+const ADMIN_TOKEN_KEY = 'yomshishi_admin_token_v3'
 
 function readStoredUserId(): number | null {
   try {
@@ -114,7 +101,7 @@ function writeStoredUserId(userId: number) {
   try {
     localStorage.setItem(USER_ID_KEY, String(userId))
   } catch (_error) {
-    // Ignore storage failures in locked-down browsers.
+    // Ignore storage failures.
   }
 }
 
@@ -122,7 +109,7 @@ function clearStoredUserId() {
   try {
     localStorage.removeItem(USER_ID_KEY)
   } catch (_error) {
-    // Ignore storage failures in locked-down browsers.
+    // Ignore storage failures.
   }
 }
 
@@ -138,7 +125,7 @@ function writeStoredAdminToken(token: string) {
   try {
     localStorage.setItem(ADMIN_TOKEN_KEY, token)
   } catch (_error) {
-    // Ignore storage failures in locked-down browsers.
+    // Ignore storage failures.
   }
 }
 
@@ -146,29 +133,20 @@ function clearStoredAdminToken() {
   try {
     localStorage.removeItem(ADMIN_TOKEN_KEY)
   } catch (_error) {
-    // Ignore storage failures in locked-down browsers.
-  }
-}
-
-function clearLegacyStorage() {
-  try {
-    localStorage.removeItem(LEGACY_USER_ID_KEY)
-    localStorage.removeItem(LEGACY_ADMIN_TOKEN_KEY)
-  } catch (_error) {
-    // Ignore storage failures in locked-down browsers.
+    // Ignore storage failures.
   }
 }
 
 function getStatusLabel(status: GameStatus): string {
   switch (status) {
     case 'OPEN':
-      return 'פתוח להרשמה'
+      return 'פתוח (פחות מ-6)'
     case 'CONFIRMED':
-      return 'מאושר (6-8 שחקנים)'
+      return 'מאושר (6-9)'
     case 'WAITING':
-      return 'הרשימה הראשית מלאה — רשימת המתנה פתוחה'
+      return 'הגרלה פעילה'
     case 'LOCKED':
-      return 'נעול (12 שחקנים)'
+      return '12 שחקנים - כולם משחקים'
     case 'CANCELLED':
       return 'מבוטל'
     default:
@@ -192,11 +170,31 @@ function toLocalDateTimeInput(isoString: string): string {
 
 function createEmptyGameForm(): GameFormState {
   return {
-    title: 'משחק 3x3',
+    title: 'משחק שישי',
     location: '',
     notes: '',
     gameDate: createDefaultGameDateInput(),
   }
+}
+
+function formatGameDateTime(value: string): string {
+  return new Date(value).toLocaleString('he-IL', {
+    weekday: 'long',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatGameDate(value: string): string {
+  return new Date(value).toLocaleDateString('he-IL', {
+    weekday: 'long',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
 }
 
 function gameToForm(game: Game): GameFormState {
@@ -206,22 +204,6 @@ function gameToForm(game: Game): GameFormState {
     notes: game.notes,
     gameDate: toLocalDateTimeInput(game.gameDate),
   }
-}
-
-function toBase64UrlUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
-  for (let index = 0; index < rawData.length; index += 1) {
-    outputArray[index] = rawData.charCodeAt(index)
-  }
-  return outputArray
-}
-
-function toArrayBuffer(data: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(data)
-  return copy.buffer as ArrayBuffer
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -239,106 +221,78 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T
 }
 
+function IntroSplash({ visible }: { visible: boolean }) {
+  if (!visible) return null
+
+  return (
+    <div className="intro-overlay">
+      <div className="intro-court">
+        <div className="hoop" />
+        <div className="ball" />
+        <div className="bounce-shadow" />
+      </div>
+      <p className="intro-title">YomShishi Basketball</p>
+    </div>
+  )
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [game, setGame] = useState<Game | null>(null)
   const [upcomingGames, setUpcomingGames] = useState<Game[]>([])
   const [maxActiveGames, setMaxActiveGames] = useState(2)
   const [apiConfig, setApiConfig] = useState<ApiConfig | null>(null)
-  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const [playerOptions, setPlayerOptions] = useState<PlayerOption[]>([])
+  const [adminPlayers, setAdminPlayers] = useState<AdminPlayer[]>([])
+  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null)
+  const [playerPassword, setPlayerPassword] = useState('')
+  const [newPlayerName, setNewPlayerName] = useState('')
+  const [playerPasswordInputs, setPlayerPasswordInputs] = useState<Record<number, string>>({})
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [googleReady, setGoogleReady] = useState(false)
-  const [pushEnabled, setPushEnabled] = useState(false)
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  const [reminderBanner, setReminderBanner] = useState<string | null>(null)
+  const [showIntro, setShowIntro] = useState(true)
   const [gameForm, setGameForm] = useState<GameFormState>(() => createEmptyGameForm())
   const [isEditingGame, setIsEditingGame] = useState(false)
   const [editingGameId, setEditingGameId] = useState<number | null>(null)
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
   const [adminUsername, setAdminUsername] = useState('gilad')
   const [adminPassword, setAdminPassword] = useState('')
   const [adminToken, setAdminToken] = useState<string>(() => readStoredAdminToken())
-  const [authTab, setAuthTab] = useState<'google' | 'admin'>('google')
-  const googleButtonRef = useRef<HTMLDivElement | null>(null)
+  const [authTab, setAuthTab] = useState<'player' | 'admin'>('player')
 
   const registeredUserId = useMemo(() => readStoredUserId(), [])
-
-  const isIos = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent), [])
-  const isStandalone = useMemo(() => {
-    const displayMode = window.matchMedia('(display-mode: standalone)').matches
-    const safariStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
-    return displayMode || safariStandalone
-  }, [])
-
   const hasAdminSession = Boolean(adminToken)
-  const needsProfileCompletion = Boolean(user && !user.profileCompleted)
 
   useEffect(() => {
-    clearLegacyStorage()
-  }, [])
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = Date.now()
-      setNowMs(now)
-
-      const upcoming = [...upcomingGames]
-      if (upcoming.length === 0) return
-
-      for (const g of upcoming) {
-        const deadline = new Date(g.registrationDeadline).getTime()
-        const diffMin = Math.round((deadline - now) / 60000)
-        if (diffMin <= 30 && diffMin > -10) {
-          const label = diffMin > 0 ? `${diffMin} דקות להרשמה למשחק ${g.title}!` : `הרשמה למשחק ${g.title} נסגרה!`
-          setReminderBanner(label)
-          return
-        }
-      }
-
-      setReminderBanner(null)
-    }, 30000)
-
-    return () => clearInterval(id)
-  }, [upcomingGames])
-
-  useEffect(() => {
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault()
-      setInstallPrompt(event)
-    }
-
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
-    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+    const timeoutId = window.setTimeout(() => setShowIntro(false), 2200)
+    return () => window.clearTimeout(timeoutId)
   }, [])
 
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        const configResponse = await apiRequest<ApiConfig>('/api/config')
+        const [configResponse, playersResponse] = await Promise.all([
+          apiRequest<ApiConfig>('/api/config'),
+          apiRequest<{ players: PlayerOption[] }>('/api/players/active'),
+        ])
         setApiConfig(configResponse)
+        setPlayerOptions(playersResponse.players || [])
 
         if (registeredUserId && Number.isInteger(registeredUserId) && registeredUserId > 0) {
           try {
             const userResponse = await apiRequest<{ user: User }>(`/api/users/${registeredUserId}`)
             setUser(userResponse.user)
-            setFirstName(userResponse.user.firstName || '')
-            setLastName(userResponse.user.lastName || '')
             await refreshAll(userResponse.user.id)
           } catch (_error) {
             clearStoredUserId()
-            clearStoredAdminToken()
-            setAdminToken('')
+            setUser(null)
             await refreshAll()
           }
         } else {
           await refreshAll()
         }
       } catch (requestError: unknown) {
-        const errorMessage =
-          requestError instanceof Error ? requestError.message : 'טעינת נתונים נכשלה.'
+        const errorMessage = requestError instanceof Error ? requestError.message : 'טעינת נתונים נכשלה.'
         setError(errorMessage)
       }
     }
@@ -351,91 +305,24 @@ function App() {
       return
     }
 
-    const targetGame =
-      (editingGameId ? upcomingGames.find((item) => item.id === editingGameId) : null) || game
+    const targetGame = (editingGameId ? upcomingGames.find((item) => item.id === editingGameId) : null) || game
     if (targetGame) {
       setGameForm(gameToForm(targetGame))
     }
   }, [game, isEditingGame, editingGameId, upcomingGames])
 
-  useEffect(() => {
-    if (user || !apiConfig?.googleClientId || !googleButtonRef.current) {
-      return
-    }
+  async function refreshPlayersList() {
+    const response = await apiRequest<{ players: PlayerOption[] }>('/api/players/active')
+    setPlayerOptions(response.players || [])
+  }
 
-    const googleIdApi = window.google?.accounts?.id
-    if (!googleIdApi) {
-      setGoogleReady(false)
-      return
-    }
-
-    const handleGoogleCredential = async (response: GoogleCredentialResponse) => {
-      if (!response.credential) {
-        setError('התקבל טוקן Google לא תקין.')
-        return
-      }
-
-      setError('')
-      setSuccess('')
-      setIsBusy(true)
-      try {
-        const authResponse = await apiRequest<{ user: User }>('/api/auth/google', {
-          method: 'POST',
-          body: JSON.stringify({ idToken: response.credential }),
-        })
-        setUser(authResponse.user)
-        setFirstName(authResponse.user.firstName || '')
-        setLastName(authResponse.user.lastName || '')
-        writeStoredUserId(authResponse.user.id)
-        await refreshAll(authResponse.user.id)
-        if (authResponse.user.firstName && authResponse.user.lastName) {
-          setSuccess('נכנסת בהצלחה עם Google.')
-        } else {
-          setSuccess('נכנסת בהצלחה. יש להשלים שם פרטי ושם משפחה כדי להמשיך.')
-        }
-      } catch (requestError: unknown) {
-        const errorMessage = requestError instanceof Error ? requestError.message : 'כניסה עם Google נכשלה.'
-        setError(errorMessage)
-      } finally {
-        setIsBusy(false)
-      }
-    }
-
-    googleIdApi.initialize({
-      client_id: apiConfig.googleClientId,
-      callback: handleGoogleCredential,
-      ux_mode: 'popup',
-      auto_select: false,
-    })
-
-    googleButtonRef.current.innerHTML = ''
-    googleIdApi.renderButton(googleButtonRef.current, {
-      theme: 'outline',
-      size: 'large',
-      text: 'continue_with',
-    })
-
-    setGoogleReady(true)
-  }, [apiConfig?.googleClientId, user, adminToken])
-
-  useEffect(() => {
-    const syncPushState = async () => {
-      if (!user || !apiConfig?.vapidPublicKey || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-        setPushEnabled(false)
-        return
-      }
-
-      try {
-        const registration = await navigator.serviceWorker.ready
-        const subscription = await registration.pushManager.getSubscription()
-        setPushEnabled(Boolean(subscription))
-      } catch (_error) {
-        setPushEnabled(false)
-      }
-    }
-
-    syncPushState()
-  }, [apiConfig?.vapidPublicKey, user])
+  async function refreshAdminPlayers() {
+    if (!hasAdminSession) return
+    const response = await apiRequest<{ players: AdminPlayer[] }>(
+      `/api/admin/players?adminToken=${encodeURIComponent(adminToken)}`
+    )
+    setAdminPlayers(response.players || [])
+  }
 
   async function refreshGame(userId?: number) {
     const query = userId ? `?userId=${userId}` : ''
@@ -451,15 +338,12 @@ function App() {
   }
 
   async function refreshAll(userId?: number) {
-    await Promise.all([refreshGame(userId), refreshUpcomingGames(userId)])
+    await Promise.all([refreshGame(userId), refreshUpcomingGames(userId), refreshPlayersList()])
   }
 
   function logout() {
     clearStoredUserId()
     setUser(null)
-    setGame(null)
-    setFirstName('')
-    setLastName('')
     setSuccess('התנתקת בהצלחה.')
     setError('')
   }
@@ -467,8 +351,8 @@ function App() {
   function logoutAdmin() {
     clearStoredAdminToken()
     setAdminToken('')
-    setAdminUsername('')
     setAdminPassword('')
+    setAdminPlayers([])
     setSuccess('יצאת ממצב אדמין.')
     setError('')
   }
@@ -491,7 +375,8 @@ function App() {
       writeStoredAdminToken(response.token)
       setAdminToken(response.token)
       setAdminPassword('')
-      setSuccess('כניסת אדמין הצליחה. ניתן לערוך או למחוק משחק פעיל.')
+      setSuccess('כניסת אדמין הצליחה.')
+      await refreshAdminPlayers()
     } catch (requestError: unknown) {
       const errorMessage = requestError instanceof Error ? requestError.message : 'כניסת אדמין נכשלה.'
       setError(errorMessage)
@@ -500,29 +385,43 @@ function App() {
     }
   }
 
-  async function saveProfile(event: FormEvent) {
-    event.preventDefault()
-    if (!user) return
+  async function loginAsSelectedPlayer() {
+    if (!selectedPlayerId) {
+      setError('יש לבחור שחקן מהרשימה.')
+      return
+    }
+
+    const selectedPlayer = playerOptions.find((item) => item.id === selectedPlayerId)
+    if (!selectedPlayer) {
+      setError('השחקן שנבחר לא נמצא.')
+      return
+    }
+
+    const confirmed = window.confirm(`האם אתה "${selectedPlayer.name}" ומאשר את ההרשמה למשחק הקרוב?`)
+    if (!confirmed) {
+      return
+    }
 
     setError('')
     setSuccess('')
     setIsBusy(true)
 
     try {
-      const response = await apiRequest<{ user: User }>(`/api/users/${user.id}/profile`, {
-        method: 'PATCH',
+      const response = await apiRequest<{ user: User }>('/api/auth/select-player', {
+        method: 'POST',
         body: JSON.stringify({
-          firstName,
-          lastName,
+          playerId: selectedPlayerId,
+          confirmed: true,
+          password: playerPassword || undefined,
         }),
       })
       setUser(response.user)
-      setFirstName(response.user.firstName)
-      setLastName(response.user.lastName)
+      writeStoredUserId(response.user.id)
+      setPlayerPassword('')
       await refreshAll(response.user.id)
-      setSuccess('השם נשמר בהצלחה.')
+      setSuccess('נכנסת בהצלחה.')
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'שמירת השם נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : 'הכניסה נכשלה.'
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -530,7 +429,7 @@ function App() {
   }
 
   async function joinGame() {
-    if (!user || !game || needsProfileCompletion) return
+    if (!user || !game) return
     setError('')
     setSuccess('')
     setIsBusy(true)
@@ -564,7 +463,7 @@ function App() {
       })
       setGame(response.game)
       await refreshUpcomingGames(user.id)
-      setSuccess('הוסרת מהרישום למשחק.')
+      setSuccess('ביטלת הרשמה למשחק.')
     } catch (requestError: unknown) {
       const errorMessage = requestError instanceof Error ? requestError.message : 'לא ניתן להסיר כרגע.'
       setError(errorMessage)
@@ -575,45 +474,10 @@ function App() {
 
   async function submitGameForm(event: FormEvent) {
     event.preventDefault()
-    if (isEditingGame) {
-      const canEditAsAdmin = Boolean(user?.isAdmin || hasAdminSession)
-      const targetGameId = editingGameId || game?.id || null
-      if (!canEditAsAdmin || !targetGameId) {
-        return
-      }
-
-      setError('')
-      setSuccess('')
-      setIsBusy(true)
-      try {
-        const payload = {
-          userId: user?.id || 0,
-          adminToken,
-          title: gameForm.title,
-          location: gameForm.location,
-          notes: gameForm.notes,
-          gameDate: new Date(gameForm.gameDate).toISOString(),
-        }
-        const response = await apiRequest<{ game: Game }>(`/api/games/${targetGameId}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        })
-        setGame(response.game)
-        await refreshUpcomingGames(user?.id)
-        setIsEditingGame(false)
-        setEditingGameId(null)
-        setSuccess('פרטי המשחק עודכנו בהצלחה.')
-      } catch (requestError: unknown) {
-        const errorMessage = requestError instanceof Error ? requestError.message : 'שמירת המשחק נכשלה.'
-        setError(errorMessage)
-      } finally {
-        setIsBusy(false)
-      }
+    if (!hasAdminSession) {
+      setError('רק אדמין יכול לפתוח משחקים חדשים.')
       return
     }
-
-    if (!user && !hasAdminSession) return
-    if (user && needsProfileCompletion && !hasAdminSession) return
 
     setError('')
     setSuccess('')
@@ -629,15 +493,25 @@ function App() {
         gameDate: new Date(gameForm.gameDate).toISOString(),
       }
 
-      const response = await apiRequest<{ game: Game; message?: string }>('/api/games', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-      setGame(response.game)
+      if (isEditingGame && editingGameId) {
+        const response = await apiRequest<{ game: Game }>(`/api/games/${editingGameId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        })
+        setGame(response.game)
+        setIsEditingGame(false)
+        setEditingGameId(null)
+        setSuccess('המשחק עודכן בהצלחה.')
+      } else {
+        const response = await apiRequest<{ game: Game; message?: string }>('/api/games', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        })
+        setGame(response.game)
+        setSuccess(response.message || 'המשחק נוצר בהצלחה.')
+      }
+
       await refreshUpcomingGames(user?.id)
-      setSuccess(
-        response.message || 'המשחק נוצר. שים לב: גם מי שיצר את המשחק חייב להירשם אליו בנפרד.'
-      )
     } catch (requestError: unknown) {
       const errorMessage = requestError instanceof Error ? requestError.message : 'שמירת המשחק נכשלה.'
       setError(errorMessage)
@@ -646,184 +520,120 @@ function App() {
     }
   }
 
-  async function deleteGame(targetGameId?: number) {
-    const deleteId = targetGameId || game?.id
-    if (!deleteId || (!user?.isAdmin && !hasAdminSession)) return
+  async function deleteGame(targetGameId: number) {
+    if (!hasAdminSession) return
+
     setError('')
     setSuccess('')
     setIsBusy(true)
 
     try {
-      await apiRequest(`/api/games/${deleteId}`, {
+      await apiRequest(`/api/games/${targetGameId}`, {
         method: 'DELETE',
-        body: JSON.stringify({
-          userId: user?.id || 0,
-          adminToken,
-        }),
+        body: JSON.stringify({ userId: user?.id || 0, adminToken }),
       })
-      if (game?.id === deleteId) {
+      if (game?.id === targetGameId) {
         setGame(null)
       }
-      setGameForm(createEmptyGameForm())
       setIsEditingGame(false)
       setEditingGameId(null)
+      setGameForm(createEmptyGameForm())
       await refreshAll(user?.id)
-      setSuccess('המשחק נמחק בהצלחה.')
+      setSuccess('המשחק נמחק.')
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'מחיקת המשחק נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : 'מחיקת משחק נכשלה.'
       setError(errorMessage)
     } finally {
       setIsBusy(false)
     }
   }
 
-  async function subscribeForPush() {
-    if (!user || !apiConfig?.vapidPublicKey) {
-      setError('Push אינו מוגדר כרגע בשרת.')
-      return
-    }
-
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setError('המכשיר אינו תומך ב-Push Notifications.')
-      return
-    }
-
-    setError('')
-    setSuccess('')
-    setIsBusy(true)
-
-    try {
-      const registration = await navigator.serviceWorker.ready
-      const serverKey = toArrayBuffer(toBase64UrlUint8Array(apiConfig.vapidPublicKey))
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: serverKey,
-      })
-
-      await apiRequest('/api/push/subscribe', {
-        method: 'POST',
-        body: JSON.stringify({
-          userId: user.id,
-          subscription,
-        }),
-      })
-
-      setPushEnabled(true)
-      setSuccess('נרשמת בהצלחה לתזכורות Push.')
-    } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'רישום ל-Push נכשל.'
-      setError(errorMessage)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  async function unsubscribeFromPush() {
-    if (!user) {
-      return
-    }
-
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setError('המכשיר אינו תומך ב-Push Notifications.')
-      return
-    }
-
-    setError('')
-    setSuccess('')
-    setIsBusy(true)
-
-    try {
-      const registration = await navigator.serviceWorker.ready
-      const subscription = await registration.pushManager.getSubscription()
-
-      if (!subscription) {
-        setPushEnabled(false)
-        setSuccess('לא נמצאה תזכורת פעילה לביטול.')
-        return
-      }
-
-      await apiRequest('/api/push/unsubscribe', {
-        method: 'POST',
-        body: JSON.stringify({
-          userId: user.id,
-          endpoint: subscription.endpoint,
-        }),
-      })
-
-      await subscription.unsubscribe()
-      setPushEnabled(false)
-      setSuccess('תזכורות ה-Push בוטלו במכשיר הזה.')
-    } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'ביטול תזכורת נכשל.'
-      setError(errorMessage)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  async function sendTestPush() {
-    if (!user) {
-      return
-    }
+  async function createPlayerByAdmin(event: FormEvent) {
+    event.preventDefault()
+    if (!hasAdminSession) return
 
     setError('')
     setSuccess('')
     setIsBusy(true)
     try {
-      const response = await apiRequest<{ sent: number; failed: number }>('/api/push/test', {
+      await apiRequest<{ player: PlayerOption }>('/api/admin/players', {
         method: 'POST',
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ adminToken, name: newPlayerName }),
       })
-      setSuccess(`נשלחה התראת בדיקה. הצליחו: ${response.sent}, נכשלו: ${response.failed}.`)
+      setNewPlayerName('')
+      await Promise.all([refreshAdminPlayers(), refreshPlayersList()])
+      setSuccess('השחקן נוסף לרשימת הפעילים.')
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'שליחת בדיקת התראה נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : 'הוספת שחקן נכשלה.'
       setError(errorMessage)
     } finally {
       setIsBusy(false)
     }
   }
 
-  async function promptInstall() {
-    if (!installPrompt) {
-      setError('התקנה אוטומטית לא זמינה כרגע בדפדפן זה.')
-      return
-    }
+  async function removePlayerByAdmin(playerId: number) {
+    if (!hasAdminSession) return
 
     setError('')
-    await installPrompt.prompt()
-    setInstallPrompt(null)
+    setSuccess('')
+    setIsBusy(true)
+    try {
+      await apiRequest(`/api/admin/players/${playerId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ adminToken }),
+      })
+      await Promise.all([refreshAdminPlayers(), refreshPlayersList()])
+      setSuccess('השחקן סומן כלא פעיל.')
+    } catch (requestError: unknown) {
+      const errorMessage = requestError instanceof Error ? requestError.message : 'מחיקת שחקן נכשלה.'
+      setError(errorMessage)
+    } finally {
+      setIsBusy(false)
+    }
   }
+
+  async function setPlayerPasswordByAdmin(playerId: number, password: string) {
+    if (!hasAdminSession || !password.trim()) return
+
+    setError('')
+    setSuccess('')
+    setIsBusy(true)
+    try {
+      await apiRequest(`/api/admin/players/${playerId}/password`, {
+        method: 'POST',
+        body: JSON.stringify({ adminToken, password: password.trim() }),
+      })
+      setSuccess('סיסמת השחקן עודכנה.')
+    } catch (requestError: unknown) {
+      const errorMessage = requestError instanceof Error ? requestError.message : 'עדכון סיסמה נכשל.'
+      setError(errorMessage)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (hasAdminSession) {
+      refreshAdminPlayers().catch(() => {
+        // Ignore and keep UI responsive.
+      })
+    }
+  }, [hasAdminSession])
 
   const spotlightGame = game ?? upcomingGames[0] ?? null
   const nextGame = upcomingGames.find((item) => item.id !== spotlightGame?.id) ?? null
   const rosterGames = [spotlightGame, nextGame].filter((item): item is Game => Boolean(item))
   const isUserInGame = Boolean(user && game?.players.some((item) => item.userId === user.id))
 
-  function deadlineCountdown(isoDeadline: string): { label: string; urgent: boolean } {
-    const diffMs = new Date(isoDeadline).getTime() - nowMs
-    if (diffMs <= 0) return { label: 'ההרשמה נסגרה', urgent: true }
-    const totalMin = Math.floor(diffMs / 60000)
-    if (totalMin < 60) return { label: `${totalMin} דקות להרשמה`, urgent: totalMin < 30 }
-    const hours = Math.floor(totalMin / 60)
-    const mins = totalMin % 60
-    const label = mins > 0 ? `${hours} שעות ו-${mins} דקות להרשמה` : `${hours} שעות להרשמה`
-    return { label, urgent: hours < 2 }
-  }
-  const canShowCreateForm = Boolean((user || hasAdminSession) && upcomingGames.length < maxActiveGames)
-  const canShowAdminEditor = Boolean((user?.isAdmin || hasAdminSession) && upcomingGames.length)
-  const isGoogleConfigured = Boolean(apiConfig?.googleClientId)
-  const isSecureOriginForGoogle =
-    window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const canShowCreateForm = Boolean(hasAdminSession && upcomingGames.length < maxActiveGames)
+  const canShowAdminEditor = Boolean(hasAdminSession && upcomingGames.length)
   const showCreateBlock = canShowCreateForm || canShowAdminEditor
   const isLandingMode = !user && !hasAdminSession
 
   return (
     <main className="app-shell">
-      {reminderBanner && (
-        <div className="reminder-banner" onClick={() => setReminderBanner(null)}>
-          ⏰ {reminderBanner} <span className="reminder-close">✕</span>
-        </div>
-      )}
+      <IntroSplash visible={showIntro} />
+
       <section className="hero hero-sport">
         <div className="topbar">
           <div className="admin-corner">
@@ -835,102 +645,76 @@ function App() {
               <button
                 type="button"
                 className={`auth-chip ${authTab === 'admin' ? 'auth-chip-active' : ''}`}
-                onClick={() => setAuthTab('admin')}
+                onClick={() => setAuthTab((current) => (current === 'admin' ? 'player' : 'admin'))}
               >
-                ADMIN
+                {authTab === 'admin' ? 'חזרה' : 'ADMIN'}
               </button>
             ) : null}
           </div>
 
           <div className="brand-block">
-            <h1 className="hero-title-neon" aria-label="Friday Hoops">
-              <span className="hero-title-line">FRIDAY</span>
-              <span className="hero-title-line">HOOPS</span>
+            <h1 className="hero-title-neon" aria-label="ספורטק 3X3">
+              <span className="hero-title-line">ספורטק</span>
+              <span className="hero-title-line">3X3</span>
             </h1>
-            <p className="hero-tagline">ליגת שישי 3x3</p>
-            <p className="hero-subtitle">אווירת מגרש, הרשמה מהירה, ותמונת מצב ברורה לכל משחק</p>
+            <p className="hero-tagline">ליגת שישי</p>
           </div>
         </div>
-
-        {!user && !hasAdminSession && (
-          <div className="hero-strip">
-            <div>
-              <strong>הרשמה חד פעמית לאפליקציה</strong>
-              <p>נכנסים פעם אחת עם Google, משלימים שם פרטי ומשפחה, ומאותו רגע רק נרשמים למשחקים.</p>
-            </div>
-          </div>
-        )}
 
         {user && (
           <div className="hero-strip hero-strip-compact">
             <div>
               <strong>{user.name}</strong>
-              <p>{user.email}</p>
+              <p>כניסה פעילה</p>
             </div>
             <button disabled={isBusy} className="cta cta-ghost" onClick={logout}>
               התנתקות
             </button>
           </div>
         )}
-
-        {hasAdminSession && (
-          <div className="hero-strip hero-strip-admin">
-            <div>
-              <strong>מצב אדמין פעיל</strong>
-              <p>אפשר לערוך, למחוק ולהקים משחק גם בלי משתמש Google מחובר.</p>
-            </div>
-          </div>
-        )}
       </section>
 
       <section className="grid">
-        {!user && !hasAdminSession && authTab === 'google' && (
+        {!user && !hasAdminSession && authTab === 'player' && (
           <article className="card full-width card-compact landing-card">
             <div className="section-head">
               <div>
-                <p className="section-kicker">How It Works</p>
-                <h2>איך זה עובד?</h2>
+                <p className="section-kicker">Player Select</p>
+                <h2>כניסה לפי רשימת שחקנים פעילים</h2>
               </div>
-              <button type="button" className="auth-tab" onClick={() => setAuthTab('admin')}>
-                מעבר ל-ADMIN
-              </button>
             </div>
-            <ul className="landing-list">
-              <li>הרשמה חד פעמית עם Google</li>
-              <li>השלמת פרטים בסיסיים (שם פרטי ומשפחה)</li>
-              <li>הרשמה למשחקים ישירות מהאפליקציה</li>
-              <li>צפיה בשמות השחקנים הרשומים בזמן אמת</li>
-            </ul>
             <div className="input-grid">
-              {!isGoogleConfigured ? (
-                <p className="message message-error">
-                  Google Sign-In לא מוגדר כרגע בשרת. יש להגדיר GOOGLE_CLIENT_ID בסביבת הפרודקשן.
-                </p>
-              ) : !isSecureOriginForGoogle ? (
-                <p className="message message-error">Google Sign-In דורש HTTPS (או localhost) כדי להציג את הכפתור.</p>
-              ) : (
-                <>
-                  <div ref={googleButtonRef} style={{ minHeight: 44 }} />
-                  {!googleReady && (
-                    <p className="muted">טוען כפתור Google... אם הוא לא מופיע, רענן את הדף.</p>
-                  )}
-                </>
+              <select
+                className="select-input"
+                value={selectedPlayerId || ''}
+                onChange={(event) => {
+                  setSelectedPlayerId(Number(event.target.value) || null)
+                  setPlayerPassword('')
+                }}
+              >
+                <option value="">בחר שחקן</option>
+                {playerOptions.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+              {selectedPlayerId && (
+                <input
+                  type="password"
+                  className="text-input"
+                  placeholder="סיסמה (אם קיימת)"
+                  value={playerPassword}
+                  onChange={(event) => setPlayerPassword(event.target.value)}
+                />
               )}
-            </div>
-            <div className="auth-actions">
               <button
                 type="button"
                 className="cta cta-primary landing-start-btn"
-                onClick={() => {
-                  if (!googleReady) return
-                  const googleButton = googleButtonRef.current?.querySelector('div[role="button"]') as
-                    | HTMLElement
-                    | null
-                  googleButton?.click()
-                }}
-                disabled={!googleReady || isBusy || !isGoogleConfigured || !isSecureOriginForGoogle}
+                onClick={loginAsSelectedPlayer}
+                disabled={isBusy || !selectedPlayerId}
               >
-                התחל עכשיו
+                אישור כניסה
               </button>
             </div>
           </article>
@@ -944,7 +728,6 @@ function App() {
                 <h2>כניסת אדמין</h2>
               </div>
             </div>
-            <p className="muted">המסך הזה מיועד למכשיר הניהול. במצב אדמין כניסת Google מוסתרת.</p>
             <form className="input-grid" onSubmit={loginAdmin}>
               <input
                 required
@@ -966,322 +749,286 @@ function App() {
           </article>
         )}
 
-        {user && needsProfileCompletion && (
-          <article className="card full-width">
-            <div className="section-head">
-              <div>
-                <p className="section-kicker">Roster Card</p>
-                <h2>השלמת פרטים אישיים</h2>
-              </div>
-            </div>
-            <p className="muted">לפני הרשמה למשחק יש לשמור שם פרטי ושם משפחה תקינים.</p>
-            <form className="input-grid" onSubmit={saveProfile}>
-              <input
-                required
-                placeholder="שם פרטי"
-                value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
-              />
-              <input
-                required
-                placeholder="שם משפחה"
-                value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
-              />
-              <button disabled={isBusy} className="cta cta-primary" type="submit">
-                שמירת פרטים
-              </button>
-            </form>
-          </article>
-        )}
-
         {!isLandingMode && (
           <>
             <article className="card full-width game-spotlight">
-          <div className="section-head">
-            <div>
-              <p className="section-kicker">Tip Off</p>
-              <h2>המשחק הקרוב</h2>
-            </div>
-            {spotlightGame && <span className={`status-badge status-${spotlightGame.status}`}>{getStatusLabel(spotlightGame.status)}</span>}
-          </div>
-          {spotlightGame ? (
-            <>
-              <div className="game-headline">
+              <div className="section-head">
                 <div>
-                  <h3>{spotlightGame.title}</h3>
-                  <p className="game-time">{new Date(spotlightGame.gameDate).toLocaleString('he-IL')}</p>
+                  <p className="section-kicker">Tip Off</p>
+                  <h2>המשחק הקרוב</h2>
                 </div>
-                <div className="game-scoreboard">
-                  <span>נרשמו</span>
-                  <strong>{spotlightGame.playersCount}/12</strong>
-                </div>
+                {spotlightGame && (
+                  <span className={`status-badge status-${spotlightGame.status}`}>
+                    {getStatusLabel(spotlightGame.status)}
+                  </span>
+                )}
               </div>
+              {spotlightGame ? (
+                <>
+                  <div className="game-headline">
+                    <div>
+                      <h3>{spotlightGame.title}</h3>
+                      <p className="game-time">{formatGameDateTime(spotlightGame.gameDate)}</p>
+                    </div>
+                    <div className="game-scoreboard">
+                      <span>נרשמו</span>
+                      <strong>{spotlightGame.playersCount}</strong>
+                    </div>
+                  </div>
 
-              <div className="meta-grid">
-                <div className="meta-pill">{spotlightGame.location || 'מיקום יעודכן'}</div>
-                <div className="meta-pill">דדליין: {new Date(spotlightGame.registrationDeadline).toLocaleString('he-IL')}</div>
-                <div className="meta-pill">יוצר: {spotlightGame.createdByName || 'מערכת'}</div>
-              </div>
+                  <div className="meta-grid">
+                    <div className="meta-pill">{spotlightGame.location || 'מיקום יעודכן'}</div>
+                    <div className="meta-pill">סגירת הרשמה: {formatGameDateTime(spotlightGame.registrationDeadline)}</div>
+                    <div className="meta-pill">מינימום לפתיחת משחק: 6 שחקנים</div>
+                  </div>
 
-              {spotlightGame.notes && <p className="muted">{spotlightGame.notes}</p>}
+                  {spotlightGame.notes && <p className="muted">{spotlightGame.notes}</p>}
 
-              {spotlightGame.registrationDeadline && (() => {
-                const { label, urgent } = deadlineCountdown(spotlightGame.registrationDeadline)
-                return (
-                  <p className={`countdown-pill ${urgent ? 'countdown-urgent' : ''}`}>
-                    {label}
-                  </p>
-                )
-              })()}
+                  {user && game && game.viewerPosition && (
+                    <p className="message message-ok inline-message">
+                      המיקום שלך: #{game.viewerPosition} | סטטוס: {game.viewerRole === 'PLAYING' ? 'משחק' : 'הוגרלת החוצה'}
+                    </p>
+                  )}
 
-              {user && game && game.viewerPosition && (
-                <p className="message message-ok inline-message">
-                  המיקום שלך: #{game.viewerPosition} | סטטוס: {game.viewerRole === 'PLAYING' ? 'משחק' : 'המתנה'}
-                </p>
+                  {game?.isRegistrationClosed && (
+                    <p className="message message-error inline-message">
+                      ההרשמה נסגרה. הנעילה מתבצעת יום לפני המשחק בשעה {String(apiConfig?.registrationLockHour || 20).padStart(2, '0')}:00.
+                    </p>
+                  )}
+
+                  <div className="row actions-row">
+                    {user && game && !isUserInGame ? (
+                      <button
+                        disabled={isBusy || game.isRegistrationClosed}
+                        className="cta cta-primary"
+                        onClick={joinGame}
+                      >
+                        {game.isRegistrationClosed ? 'ההרשמה נסגרה' : 'הרשמה למשחק'}
+                      </button>
+                    ) : null}
+
+                    {game && isUserInGame ? (
+                      <button disabled={isBusy} className="cta cta-danger" onClick={leaveGame}>
+                        ביטול הרשמה
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <p className="muted">אין כרגע משחק מתוכנן. אדמין יכול לפתוח משחק חדש.</p>
               )}
-
-              {game?.status === 'WAITING' && !game.isRegistrationClosed && (
-                <p className="message message-ok inline-message">
-                  הרשימה הראשית מלאה (9 שחקנים) — רשימת המתנה פתוחה למיקומים 10–11.
-                </p>
-              )}
-
-              {game?.isRegistrationClosed && (
-                <p className="message message-error inline-message">
-                  {game.status === 'LOCKED'
-                    ? 'המשחק נעול — 12 שחקנים נרשמו. רשימת ההמתנה הצטרפה לרשימה הכללית.'
-                    : `ההרשמה נסגרה כי נותרו פחות מ-${apiConfig?.registrationLeadHours || 24} שעות לפתיחה.`}
-                </p>
-              )}
-
-              <div className="row actions-row">
-                {user && game && !isUserInGame ? (
-                <button
-                  disabled={isBusy || game.isRegistrationClosed || needsProfileCompletion}
-                  className="cta cta-primary"
-                  onClick={joinGame}
-                >
-                  {game.isRegistrationClosed
-                    ? 'ההרשמה נסגרה'
-                    : game.playersCount >= 9
-                    ? 'הצטרפות לרשימת המתנה'
-                    : 'הצטרפות למשחק'}
-                </button>
-              ) : null}
-
-                {game && isUserInGame ? (
-                  <button disabled={isBusy} className="cta cta-danger" onClick={leaveGame}>
-                    ביטול הרשמה
-                  </button>
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <p className="muted">אין כרגע משחק מתוכנן. אם יש הרשאה, אפשר להקים מיד משחק חדש.</p>
-          )}
             </article>
 
             {nextGame && (
               <article className="card full-width next-game-card">
-            <div className="section-head">
-              <div>
-                <p className="section-kicker">On Deck</p>
-                <h2>המשחק הבא</h2>
-              </div>
-              <span className={`status-badge status-${nextGame.status}`}>{getStatusLabel(nextGame.status)}</span>
-            </div>
-            <div className="game-headline compact-headline">
-              <div>
-                <h3>{nextGame.title}</h3>
-                <p className="game-time">{new Date(nextGame.gameDate).toLocaleString('he-IL')}</p>
-              </div>
-              <div className="game-scoreboard game-scoreboard-small">
-                <span>נרשמו</span>
-                <strong>{nextGame.playersCount}/12</strong>
-              </div>
-            </div>
-            <div className="meta-grid">
-              <div className="meta-pill">{nextGame.location || 'מיקום יעודכן'}</div>
-              <div className="meta-pill">דדליין: {new Date(nextGame.registrationDeadline).toLocaleString('he-IL')}</div>
-            </div>
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">On Deck</p>
+                    <h2>המשחק הבא</h2>
+                  </div>
+                  <span className={`status-badge status-${nextGame.status}`}>{getStatusLabel(nextGame.status)}</span>
+                </div>
+                <div className="game-headline compact-headline">
+                  <div>
+                    <h3>{nextGame.title}</h3>
+                    <p className="game-time">{formatGameDateTime(nextGame.gameDate)}</p>
+                  </div>
+                  <div className="game-scoreboard game-scoreboard-small">
+                    <span>נרשמו</span>
+                    <strong>{nextGame.playersCount}</strong>
+                  </div>
+                </div>
               </article>
             )}
 
-            {user && (
+            {hasAdminSession && (
               <article className="card full-width card-compact">
-            <div className="section-head">
-              <div>
-                <p className="section-kicker">Alerts</p>
-                <h2>תזכורות והתקנה</h2>
-              </div>
-            </div>
-            <div className="row actions-row">
-              <button
-                disabled={isBusy || !apiConfig?.vapidPublicKey || pushEnabled}
-                className="cta cta-primary"
-                onClick={subscribeForPush}
-              >
-                הפעלת תזכורת
-              </button>
-              <button
-                disabled={isBusy || !apiConfig?.vapidPublicKey || !pushEnabled}
-                className="cta cta-soft"
-                onClick={unsubscribeFromPush}
-              >
-                ביטול תזכורת
-              </button>
-              {installPrompt && (
-                <button disabled={isBusy} className="cta cta-soft" onClick={promptInstall}>
-                  התקנת האפליקציה
-                </button>
-              )}
-              <button
-                disabled={isBusy || !apiConfig?.vapidPublicKey}
-                className="cta cta-soft"
-                onClick={sendTestPush}
-              >
-                בדיקת התראה
-              </button>
-            </div>
-            {!installPrompt && isIos && !isStandalone && (
-              <p className="message message-ok inline-message">iPhone/iPad: לחץ על Share ואז Add to Home Screen.</p>
-            )}
-            {!installPrompt && !isIos && (
-              <p className="muted">התקנה אוטומטית תופיע בדפדפנים תומכים, בעיקר Android/Chrome.</p>
-            )}
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">Player Management</p>
+                    <h2>ניהול שחקנים פעילים</h2>
+                  </div>
+                </div>
+
+                <form className="input-grid" onSubmit={createPlayerByAdmin}>
+                  <input
+                    required
+                    placeholder="שם שחקן חדש"
+                    value={newPlayerName}
+                    onChange={(event) => setNewPlayerName(event.target.value)}
+                  />
+                  <button disabled={isBusy} className="cta cta-primary" type="submit">
+                    הוספת שחקן
+                  </button>
+                </form>
+
+                <ul className="players players-grid" style={{ marginTop: 14 }}>
+                  {adminPlayers.map((player) => (
+                    <li key={player.id}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                        <div>
+                          <strong>{player.name}</strong> {player.isActive ? '(פעיל)' : '(לא פעיל)'}
+                        </div>
+                        {player.isActive && (
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                            <input
+                              type="password"
+                              className="text-input"
+                              placeholder="הגדר סיסמה"
+                              value={playerPasswordInputs[player.id] || ''}
+                              onChange={(event) =>
+                                setPlayerPasswordInputs((prev) => ({
+                                  ...prev,
+                                  [player.id]: event.target.value,
+                                }))
+                              }
+                              style={{ flex: 1, fontSize: '14px' }}
+                            />
+                            <button
+                              type="button"
+                              disabled={isBusy || !playerPasswordInputs[player.id]?.trim()}
+                              className="cta cta-secondary"
+                              style={{ padding: '8px 12px', fontSize: '12px' }}
+                              onClick={() => {
+                                setPlayerPasswordByAdmin(player.id, playerPasswordInputs[player.id] || '').then(() => {
+                                  setPlayerPasswordInputs((prev) => ({
+                                    ...prev,
+                                    [player.id]: '',
+                                  }))
+                                })
+                              }}
+                            >
+                              שמור סיסמה
+                            </button>
+                          </div>
+                        )}
+                        {player.isActive && (
+                          <button
+                            disabled={isBusy}
+                            className="cta cta-danger"
+                            onClick={() => removePlayerByAdmin(player.id)}
+                          >
+                            מחיקה
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </article>
             )}
 
             {showCreateBlock && (
               <article className="card full-width">
-            <div className="section-head">
-              <div>
-                <p className="section-kicker">Next Match Setup</p>
-                <h2>{isEditingGame ? 'עריכת משחק' : 'הקמת משחק חדש'}</h2>
-              </div>
-            </div>
-            <p className="muted">
-              מציגים כאן יצירה כשהמערכת ריקה או כשקיים רק משחק עתידי אחד. גם יוצר המשחק צריך להירשם אליו בנפרד.
-            </p>
-            {canShowAdminEditor && !isEditingGame ? (
-              <div className="row" style={{ marginTop: 12 }}>
-                {upcomingGames.map((item) => (
-                  <button
-                    key={`edit-${item.id}`}
-                    className="cta cta-primary"
-                    disabled={isBusy}
-                    onClick={() => {
-                      setEditingGameId(item.id)
-                      setIsEditingGame(true)
-                    }}
-                  >
-                    עריכת {new Date(item.gameDate).toLocaleDateString('he-IL')}
-                  </button>
-                ))}
-                {upcomingGames.map((item) => (
-                  <button
-                    key={`delete-${item.id}`}
-                    className="cta cta-danger"
-                    disabled={isBusy}
-                    onClick={() => deleteGame(item.id)}
-                  >
-                    מחיקת {new Date(item.gameDate).toLocaleDateString('he-IL')}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <form className="input-grid" onSubmit={submitGameForm}>
-                <input
-                  required
-                  placeholder="כותרת המשחק"
-                  value={gameForm.title}
-                  onChange={(event) => setGameForm((current) => ({ ...current, title: event.target.value }))}
-                />
-                <input
-                  placeholder="מיקום"
-                  value={gameForm.location}
-                  onChange={(event) => setGameForm((current) => ({ ...current, location: event.target.value }))}
-                />
-                <input
-                  required
-                  type="datetime-local"
-                  value={gameForm.gameDate}
-                  onChange={(event) => setGameForm((current) => ({ ...current, gameDate: event.target.value }))}
-                />
-                <textarea
-                  placeholder="הערות"
-                  value={gameForm.notes}
-                  onChange={(event) => setGameForm((current) => ({ ...current, notes: event.target.value }))}
-                  style={{ minHeight: 100 }}
-                />
-                <div className="row">
-                  <button
-                    disabled={isBusy || (needsProfileCompletion && !hasAdminSession)}
-                    className="cta cta-primary"
-                    type="submit"
-                  >
-                    {isEditingGame ? 'שמירת שינויים' : 'יצירת משחק'}
-                  </button>
-                  {isEditingGame && (
-                    <button
-                      disabled={isBusy}
-                      className="cta cta-soft"
-                      type="button"
-                      onClick={() => {
-                        setIsEditingGame(false)
-                        setEditingGameId(null)
-                      }}
-                    >
-                      ביטול
-                    </button>
-                  )}
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">Next Match Setup</p>
+                    <h2>{isEditingGame ? 'עריכת משחק' : 'פתיחת משחק חדש (אדמין בלבד)'}</h2>
+                  </div>
                 </div>
-              </form>
-            )}
-              </article>
-            )}
 
-            {!showCreateBlock && (
-              <article className="card full-width">
-            <div className="section-head">
-              <div>
-                <p className="section-kicker">Schedule Locked</p>
-                <h2>הקמת משחק חדש</h2>
-              </div>
-            </div>
-            <p className="muted">כבר קיימים שני משחקים עתידיים. אחרי מחיקה או סיום של אחד מהם, אזור ההקמה יחזור להופיע.</p>
+                {canShowAdminEditor && !isEditingGame ? (
+                  <div className="row" style={{ marginTop: 12 }}>
+                    {upcomingGames.map((item) => (
+                      <button
+                        key={`edit-${item.id}`}
+                        className="cta cta-primary"
+                        disabled={isBusy}
+                        onClick={() => {
+                          setEditingGameId(item.id)
+                          setIsEditingGame(true)
+                        }}
+                      >
+                        עריכת {formatGameDate(item.gameDate)}
+                      </button>
+                    ))}
+                    {upcomingGames.map((item) => (
+                      <button
+                        key={`delete-${item.id}`}
+                        className="cta cta-danger"
+                        disabled={isBusy}
+                        onClick={() => deleteGame(item.id)}
+                      >
+                        מחיקת {formatGameDate(item.gameDate)}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <form className="input-grid" onSubmit={submitGameForm}>
+                    <input
+                      required
+                      placeholder="כותרת המשחק"
+                      value={gameForm.title}
+                      onChange={(event) => setGameForm((current) => ({ ...current, title: event.target.value }))}
+                    />
+                    <input
+                      placeholder="מיקום"
+                      value={gameForm.location}
+                      onChange={(event) => setGameForm((current) => ({ ...current, location: event.target.value }))}
+                    />
+                    <input
+                      required
+                      type="datetime-local"
+                      value={gameForm.gameDate}
+                      onChange={(event) => setGameForm((current) => ({ ...current, gameDate: event.target.value }))}
+                    />
+                    <textarea
+                      placeholder="הערות"
+                      value={gameForm.notes}
+                      onChange={(event) => setGameForm((current) => ({ ...current, notes: event.target.value }))}
+                      style={{ minHeight: 100 }}
+                    />
+                    <div className="row">
+                      <button disabled={isBusy} className="cta cta-primary" type="submit">
+                        {isEditingGame ? 'שמירת שינויים' : 'יצירת משחק'}
+                      </button>
+                      {isEditingGame && (
+                        <button
+                          disabled={isBusy}
+                          className="cta cta-soft"
+                          type="button"
+                          onClick={() => {
+                            setIsEditingGame(false)
+                            setEditingGameId(null)
+                          }}
+                        >
+                          ביטול
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                )}
               </article>
             )}
 
             {rosterGames.map((rosterGame, index) => (
               <article key={rosterGame.id} className="card full-width roster-card">
-            <div className="section-head">
-              <div>
-                <p className="section-kicker">{index === 0 ? 'Lineup' : 'Next Lineup'}</p>
-                <h2>{index === 0 ? 'שמות הנרשמים למשחק הקרוב' : 'שמות הנרשמים למשחק הבא'}</h2>
-              </div>
-              <span className={`status-badge status-${rosterGame.status}`}>{getStatusLabel(rosterGame.status)}</span>
-            </div>
-            <p className="muted roster-meta">
-              {rosterGame.title} | {new Date(rosterGame.gameDate).toLocaleString('he-IL')}
-            </p>
-            <ul className="players players-grid">
-              {rosterGame.players.length ? (
-                rosterGame.players.map((player) => (
-                  <li key={player.registrationId}>
-                    <span>
-                      <strong>#{player.position}</strong> {player.name}
-                    </span>
-                    <span className={`tag ${player.role === 'PLAYING' ? 'tag-play' : 'tag-wait'}`}>
-                      {player.role === 'PLAYING' ? 'משחק' : 'המתנה'}
-                    </span>
-                  </li>
-                ))
-              ) : (
-                <li className="muted">עדיין אין נרשמים למשחק הזה.</li>
-              )}
-            </ul>
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">{index === 0 ? 'Lineup' : 'Next Lineup'}</p>
+                    <h2>{index === 0 ? 'נרשמים למשחק הקרוב' : 'נרשמים למשחק הבא'}</h2>
+                  </div>
+                  <span className={`status-badge status-${rosterGame.status}`}>{getStatusLabel(rosterGame.status)}</span>
+                </div>
+                <p className="muted roster-meta">
+                  {rosterGame.title} | {formatGameDateTime(rosterGame.gameDate)}
+                </p>
+                <ul className="players players-grid">
+                  {rosterGame.players.length ? (
+                    rosterGame.players.map((player) => (
+                      <li key={player.registrationId}>
+                        <span>
+                          <strong>#{player.position}</strong> {player.name}
+                        </span>
+                        <span className={`tag ${player.role === 'PLAYING' ? 'tag-play' : 'tag-wait'}`}>
+                          {player.role === 'PLAYING' ? 'משחק' : 'בחוץ בסבב'}
+                        </span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="muted">עדיין אין נרשמים למשחק הזה.</li>
+                  )}
+                </ul>
               </article>
             ))}
           </>

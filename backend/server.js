@@ -3,50 +3,37 @@ const crypto = require('crypto');
 const dotenv = require('dotenv');
 const express = require('express');
 const fs = require('fs');
-const { OAuth2Client } = require('google-auth-library');
 const path = require('path');
 const initSqlJs = require('sql.js');
-const webPush = require('web-push');
 
 dotenv.config();
 
 const PORT = Number(process.env.PORT || 8787);
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
-const FRONTEND_ORIGINS = FRONTEND_ORIGIN.split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const DEFAULT_LOCAL_ORIGINS = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+];
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || DEFAULT_LOCAL_ORIGINS.join(',');
+const FRONTEND_ORIGINS = Array.from(
+  new Set(
+    FRONTEND_ORIGIN.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+      .concat(DEFAULT_LOCAL_ORIGINS)
+  )
+);
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'yomshishi.sqlite');
 const FRONTEND_DIST_DIR = path.join(__dirname, '..', 'frontend', 'dist');
-const APPROVED_EMAILS = (process.env.APPROVED_EMAILS || '')
-  .split(',')
-  .map((item) => item.trim().toLowerCase())
-  .filter(Boolean);
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
-  .split(',')
-  .map((item) => item.trim().toLowerCase())
-  .filter(Boolean);
 const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || 'gilad').trim();
-const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || 'admin').trim();
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || 'liga').trim();
 const ADMIN_TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
-const REGISTRATION_LEAD_HOURS = Number(process.env.REGISTRATION_LEAD_HOURS || 24);
-const REGISTRATION_LEAD_MS = REGISTRATION_LEAD_HOURS * 60 * 60 * 1000;
+const REGISTRATION_LOCK_HOUR = Number(process.env.REGISTRATION_LOCK_HOUR || 20);
 const MAX_ACTIVE_GAMES = 2;
-const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
-
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
-const REMINDER_SECRET = process.env.REMINDER_SECRET || '';
-const googleOAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
-
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-}
 
 let db;
-let reminderInterval = null;
-let reminderDispatchInFlight = false;
 const adminSessions = new Map();
 
 function all(sql, params = []) {
@@ -83,42 +70,38 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
+function parseDate(value) {
+  const date = new Date(String(value || ''));
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function ensureApproved(_email) {
-  return { ok: true };
+function registrationDeadlineIso(gameDate) {
+  const game = new Date(gameDate);
+  const deadline = new Date(game);
+  deadline.setDate(deadline.getDate() - 1);
+  deadline.setHours(REGISTRATION_LOCK_HOUR, 0, 0, 0);
+  return deadline.toISOString();
 }
 
-function isAdminEmail(email) {
-  return ADMIN_EMAILS.includes(normalizeEmail(email));
+function isRegistrationOpen(gameDate) {
+  return Date.now() < new Date(registrationDeadlineIso(gameDate)).getTime();
 }
 
-function splitName(fullName) {
-  const normalized = String(fullName || '').trim().replace(/\s+/g, ' ');
-  if (!normalized) {
-    return { firstName: '', lastName: '' };
+function gameStatusByCount(totalPlayers, cancelled) {
+  if (cancelled) return 'CANCELLED';
+  if (totalPlayers >= 13 || totalPlayers === 10 || totalPlayers === 11) return 'WAITING';
+  if (totalPlayers === 12) return 'LOCKED';
+  if (totalPlayers >= 6) return 'CONFIRMED';
+  return 'OPEN';
+}
+
+function ensureColumn(tableName, columnName, definition) {
+  const columns = all(`PRAGMA table_info(${tableName})`);
+  if (columns.some((column) => column.name === columnName)) {
+    return;
   }
 
-  const parts = normalized.split(' ');
-  if (parts.length === 1) {
-    return { firstName: parts[0], lastName: '' };
-  }
-
-  return {
-    firstName: parts[0],
-    lastName: parts.slice(1).join(' '),
-  };
-}
-
-function composeDisplayName(firstName, lastName, fallback) {
-  const full = `${String(firstName || '').trim()} ${String(lastName || '').trim()}`.trim();
-  if (full) {
-    return full;
-  }
-
-  return String(fallback || '').trim();
+  run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
 }
 
 function clearExpiredAdminSessions() {
@@ -152,104 +135,77 @@ function isValidAdminToken(token) {
   return session.expiresAt > Date.now();
 }
 
-function parseDate(value) {
-  const date = new Date(String(value || ''));
-  return Number.isNaN(date.getTime()) ? null : date;
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const iterations = 100000;
+  const hash = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('hex');
+  return `${salt}:${hash}`;
 }
 
-function registrationDeadlineIso(gameDate) {
-  return new Date(new Date(gameDate).getTime() - REGISTRATION_LEAD_MS).toISOString();
+function verifyPassword(password, storedHash) {
+  if (!storedHash) {
+    return false;
+  }
+  const [salt, hash] = storedHash.split(':');
+  if (!salt || !hash) {
+    return false;
+  }
+  const iterations = 100000;
+  const testHash = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('hex');
+  return testHash === hash;
 }
 
-function isRegistrationOpen(gameDate) {
-  return Date.now() < new Date(registrationDeadlineIso(gameDate)).getTime();
-}
+function composeDisplayName(firstName, lastName, fallback) {
+  const normalizedFirstName = String(firstName || '').trim();
+  const normalizedLastName = String(lastName || '').trim();
+  const normalizedFallback = String(fallback || '').trim();
 
-function formatDateTime(dateValue) {
-  return new Date(dateValue).toLocaleString('he-IL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function gameStatusByCount(totalPlayers, cancelled) {
-  if (cancelled) return 'CANCELLED';
-  if (totalPlayers === 12) return 'LOCKED';
-  if (totalPlayers >= 9) return 'WAITING';
-  if (totalPlayers >= 6) return 'CONFIRMED';
-  return 'OPEN';
-}
-
-function ensureColumn(tableName, columnName, definition) {
-  const columns = all(`PRAGMA table_info(${tableName})`);
-  if (columns.some((column) => column.name === columnName)) {
-    return;
+  if (normalizedFirstName && normalizedLastName) {
+    return `${normalizedFirstName} ${normalizedLastName}`.trim();
   }
 
-  run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  if (normalizedFallback) {
+    return normalizedFallback;
+  }
+
+  return `${normalizedFirstName} ${normalizedLastName}`.trim();
 }
 
 function getUserRow(userId) {
   return get(
-    'SELECT id, name, email, first_name, last_name, profile_completed FROM users WHERE id = ?',
+    'SELECT id, name, email, first_name, last_name, password_hash, profile_completed, is_active FROM users WHERE id = ?',
     [userId]
   );
 }
 
-function upsertUser(name, email, firstName = '', lastName = '') {
-  const existingUser = get(
-    'SELECT id, name, email, first_name, last_name, profile_completed FROM users WHERE email = ?',
-    [email]
+function getActivePlayerRows() {
+  return all(
+    `SELECT id, name, email, first_name, last_name, profile_completed, is_active
+     FROM users
+     WHERE is_active = 1
+     ORDER BY name COLLATE NOCASE ASC, id ASC`
   );
-  const mergedName = composeDisplayName(firstName, lastName, name);
+}
 
-  if (existingUser) {
-    const isProfileCompleted = Number(existingUser.profile_completed) === 1;
-    const nextFirstName = isProfileCompleted
-      ? String(existingUser.first_name || '')
-      : String(firstName || '');
-    const nextLastName = isProfileCompleted
-      ? String(existingUser.last_name || '')
-      : String(lastName || '');
-    const nextDisplayName = isProfileCompleted
-      ? composeDisplayName(existingUser.first_name, existingUser.last_name, existingUser.name)
-      : mergedName;
+function createLocalEmailForPlayer() {
+  return `player-${Date.now()}-${Math.floor(Math.random() * 1000000)}@local`;
+}
 
-    if (
-      String(existingUser.name || '') !== String(nextDisplayName || '') ||
-      String(existingUser.first_name || '') !== String(nextFirstName || '') ||
-      String(existingUser.last_name || '') !== String(nextLastName || '')
-    ) {
-      run('UPDATE users SET name = ?, first_name = ?, last_name = ?, updated_at = ? WHERE id = ?', [
-        nextDisplayName,
-        nextFirstName,
-        nextLastName,
-        nowIso(),
-        existingUser.id,
-      ]);
-      persistDb();
-    }
-
-    return getUserRow(Number(existingUser.id));
+function createPlayer(name) {
+  const displayName = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!displayName) {
+    return { error: 'יש להזין שם שחקן.' };
   }
 
+  const [firstToken = displayName, ...restTokens] = displayName.split(' ');
+  const lastToken = restTokens.join(' ').trim();
   run(
-    'INSERT INTO users (name, email, first_name, last_name, profile_completed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
-    [
-      mergedName,
-      email,
-      String(firstName || ''),
-      String(lastName || ''),
-      nowIso(),
-      nowIso(),
-    ]
+    `INSERT INTO users (name, email, first_name, last_name, profile_completed, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 1, 1, ?, ?)`,
+    [displayName, createLocalEmailForPlayer(), firstToken, lastToken, nowIso(), nowIso()]
   );
   const row = get('SELECT last_insert_rowid() AS id');
-  persistDb();
-  return getUserRow(Number(row.id));
+  return { user: getUserRow(Number(row.id)) };
 }
 
 function serializeUser(user) {
@@ -262,18 +218,8 @@ function serializeUser(user) {
     lastName,
     profileCompleted: Number(user.profile_completed) === 1,
     email: user.email,
-    isAdmin: isAdminEmail(user.email),
-  };
-}
-
-function ensureProfileCompleted(user) {
-  if (Number(user.profile_completed) === 1) {
-    return { ok: true };
-  }
-
-  return {
-    ok: false,
-    message: 'לפני פעולת משחק יש להשלים שם פרטי ושם משפחה ולשמור.',
+    isAdmin: false,
+    isActive: Number(user.is_active) === 1,
   };
 }
 
@@ -283,8 +229,8 @@ function getRequester(userId) {
   }
 
   const user = getUserRow(userId);
-  if (!user) {
-    return { error: { status: 404, message: 'משתמש לא נמצא.' } };
+  if (!user || Number(user.is_active) !== 1) {
+    return { error: { status: 404, message: 'שחקן לא נמצא או לא פעיל.' } };
   }
 
   return { user };
@@ -296,7 +242,6 @@ function ensureAdmin(userId, adminToken = '') {
       user: {
         id: 0,
         name: 'Admin',
-        email: 'admin@local',
       },
     };
   }
@@ -306,16 +251,7 @@ function ensureAdmin(userId, adminToken = '') {
     return requester;
   }
 
-  if (!isAdminEmail(requester.user.email)) {
-    return { error: { status: 403, message: 'רק אדמין יכול לבצע פעולה זו.' } };
-  }
-
-  return requester;
-}
-
-function getUpcomingGameId() {
-  const ids = getUpcomingGameIds(1);
-  return ids.length ? ids[0] : null;
+  return { error: { status: 403, message: 'נדרשת כניסת אדמין.' } };
 }
 
 function getUpcomingGameIds(limit = MAX_ACTIVE_GAMES) {
@@ -331,9 +267,13 @@ function getUpcomingGameIds(limit = MAX_ACTIVE_GAMES) {
   return rows.map((row) => Number(row.id));
 }
 
+function getUpcomingGameId() {
+  const ids = getUpcomingGameIds(1);
+  return ids.length ? ids[0] : null;
+}
+
 function getUpcomingGames(viewerUserId = null, limit = MAX_ACTIVE_GAMES) {
   const gameIds = getUpcomingGameIds(limit);
-  gameIds.forEach((gameId) => recalculateGame(gameId));
   return gameIds.map((gameId) => serializeGame(gameId, viewerUserId)).filter(Boolean);
 }
 
@@ -341,8 +281,7 @@ function getUpcomingGamesCount() {
   const row = get(
     `SELECT COUNT(*) AS count
      FROM games
-     WHERE is_cancelled = 0 AND game_date >= ?
-    `,
+     WHERE is_cancelled = 0 AND game_date >= ?`,
     [nowIso()]
   );
 
@@ -351,22 +290,19 @@ function getUpcomingGamesCount() {
 
 function getGameRow(gameId) {
   return get(
-    `SELECT g.id,
-            g.title,
-            g.location,
-            g.notes,
-            g.game_date,
-            g.status,
-            g.is_cancelled,
-            g.created_by_user_id,
-            g.reminder_due_at,
-            g.reminder_sent_at,
-            g.created_at,
-            g.updated_at,
-            u.name AS created_by_name
-     FROM games g
-     LEFT JOIN users u ON u.id = g.created_by_user_id
-     WHERE g.id = ?`,
+    `SELECT id,
+            title,
+            location,
+            notes,
+            game_date,
+            status,
+            is_cancelled,
+            created_by_user_id,
+            created_at,
+            updated_at,
+            lottery_signature
+     FROM games
+     WHERE id = ?`,
     [gameId]
   );
 }
@@ -385,14 +321,105 @@ function reorderPositions(gameId) {
   });
 }
 
+function shuffle(array) {
+  const items = [...array];
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const temp = items[index];
+    items[index] = items[swapIndex];
+    items[swapIndex] = temp;
+  }
+  return items;
+}
+
+function pickBenchedUsersByRotation(candidateUserIds, benchCount) {
+  if (!candidateUserIds.length || benchCount <= 0) {
+    return [];
+  }
+
+  const stats = new Map();
+  candidateUserIds.forEach((userId) => {
+    const row = get('SELECT bench_count FROM lottery_stats WHERE user_id = ?', [userId]);
+    stats.set(userId, row ? Number(row.bench_count) : 0);
+  });
+
+  const picked = [];
+  const pool = [...candidateUserIds];
+
+  while (picked.length < benchCount && pool.length > 0) {
+    let minBench = Number.MAX_SAFE_INTEGER;
+    pool.forEach((userId) => {
+      minBench = Math.min(minBench, Number(stats.get(userId) || 0));
+    });
+
+    const tier = pool.filter((userId) => Number(stats.get(userId) || 0) === minBench);
+    const randomizedTier = shuffle(tier);
+    const needed = benchCount - picked.length;
+    const toTake = randomizedTier.slice(0, needed);
+
+    toTake.forEach((userId) => {
+      picked.push(userId);
+      const index = pool.indexOf(userId);
+      if (index >= 0) {
+        pool.splice(index, 1);
+      }
+    });
+  }
+
+  picked.forEach((userId) => {
+    const existing = get('SELECT user_id, bench_count FROM lottery_stats WHERE user_id = ?', [userId]);
+    if (existing) {
+      run('UPDATE lottery_stats SET bench_count = ?, updated_at = ? WHERE user_id = ?', [
+        Number(existing.bench_count) + 1,
+        nowIso(),
+        userId,
+      ]);
+    } else {
+      run(
+        'INSERT INTO lottery_stats (user_id, bench_count, created_at, updated_at) VALUES (?, 1, ?, ?)',
+        [userId, nowIso(), nowIso()]
+      );
+    }
+  });
+
+  return picked;
+}
+
+function resolveLottery(registrations) {
+  const totalPlayers = registrations.length;
+  if (totalPlayers <= 9 || totalPlayers === 12) {
+    return { benchCount: 0, candidateUserIds: [] };
+  }
+
+  if (totalPlayers === 10) {
+    return {
+      benchCount: 1,
+      candidateUserIds: registrations.map((item) => Number(item.user_id)),
+    };
+  }
+
+  if (totalPlayers === 11) {
+    return {
+      benchCount: 2,
+      candidateUserIds: registrations.map((item) => Number(item.user_id)),
+    };
+  }
+
+  const extras = registrations.filter((item) => Number(item.position) >= 13);
+  return {
+    benchCount: totalPlayers - 12,
+    candidateUserIds: extras.map((item) => Number(item.user_id)),
+  };
+}
+
 function recalculateGame(gameId) {
-  const game = get('SELECT game_date, is_cancelled FROM games WHERE id = ?', [gameId]);
+  const game = get('SELECT id, game_date, is_cancelled, lottery_signature FROM games WHERE id = ?', [gameId]);
   if (!game) {
     return;
   }
 
   const registrations = all(
-    `SELECT id, position
+    `SELECT id, user_id, position
      FROM registrations
      WHERE game_id = ?
      ORDER BY position ASC, joined_at ASC, id ASC`,
@@ -401,22 +428,45 @@ function recalculateGame(gameId) {
 
   const totalPlayers = registrations.length;
   const isCancelled = Number(game.is_cancelled) === 1;
+  const lotteryPlan = resolveLottery(registrations);
+  const signature = `${registrations.map((item) => Number(item.user_id)).join(',')}|${lotteryPlan.benchCount}|${lotteryPlan.candidateUserIds.join(',')}`;
+
+  let benchedUserIds = [];
+
+  if (lotteryPlan.benchCount > 0) {
+    const existing = all('SELECT user_id FROM game_lottery WHERE game_id = ? ORDER BY user_id ASC', [gameId]).map(
+      (row) => Number(row.user_id)
+    );
+
+    const canReuseExisting =
+      String(game.lottery_signature || '') === signature &&
+      existing.length === lotteryPlan.benchCount &&
+      existing.every((userId) => lotteryPlan.candidateUserIds.includes(userId));
+
+    if (canReuseExisting) {
+      benchedUserIds = existing;
+    } else {
+      benchedUserIds = pickBenchedUsersByRotation(lotteryPlan.candidateUserIds, lotteryPlan.benchCount);
+      run('DELETE FROM game_lottery WHERE game_id = ?', [gameId]);
+      benchedUserIds.forEach((userId) => {
+        run('INSERT INTO game_lottery (game_id, user_id, created_at) VALUES (?, ?, ?)', [gameId, userId, nowIso()]);
+      });
+    }
+  } else {
+    run('DELETE FROM game_lottery WHERE game_id = ?', [gameId]);
+    benchedUserIds = [];
+  }
 
   registrations.forEach((item) => {
-    const role = totalPlayers === 12 || Number(item.position) <= 9 ? 'PLAYING' : 'WAITING';
+    const role = benchedUserIds.includes(Number(item.user_id)) ? 'WAITING' : 'PLAYING';
     run('UPDATE registrations SET role = ? WHERE id = ?', [role, item.id]);
   });
 
   run(
     `UPDATE games
-     SET status = ?, reminder_due_at = ?, updated_at = ?
+     SET status = ?, lottery_signature = ?, updated_at = ?
      WHERE id = ?`,
-    [
-      gameStatusByCount(totalPlayers, isCancelled),
-      registrationDeadlineIso(game.game_date),
-      nowIso(),
-      gameId,
-    ]
+    [gameStatusByCount(totalPlayers, isCancelled), lotteryPlan.benchCount > 0 ? signature : '', nowIso(), gameId]
   );
 
   persistDb();
@@ -434,8 +484,7 @@ function serializeGame(gameId, viewerUserId = null) {
             r.role,
             r.joined_at,
             u.id AS user_id,
-            u.name,
-            u.email
+            u.name
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      WHERE r.game_id = ?
@@ -445,7 +494,7 @@ function serializeGame(gameId, viewerUserId = null) {
     registrationId: Number(row.registration_id),
     userId: Number(row.user_id),
     name: row.name,
-    email: row.email,
+    email: '',
     position: Number(row.position),
     role: row.role,
     joinedAt: row.joined_at,
@@ -457,32 +506,32 @@ function serializeGame(gameId, viewerUserId = null) {
 
   return {
     id: Number(game.id),
-    title: game.title || 'משחק 3x3',
+    title: game.title || 'משחק שישי',
     location: game.location || '',
     notes: game.notes || '',
     gameDate: game.game_date,
     status: game.status,
     isCancelled: Number(game.is_cancelled) === 1,
     minPlayersForConfirmation: 6,
-    maxPlayers: 12,
+    maxPlayers: 999,
     playersCount: players.length,
     players,
     viewerPosition: viewerPlayer?.position || null,
     viewerRole: viewerPlayer?.role || null,
     createdByUserId: game.created_by_user_id ? Number(game.created_by_user_id) : null,
-    createdByName: game.created_by_name || '',
+    createdByName: 'אדמין',
     registrationDeadline: registrationDeadlineIso(game.game_date),
-    canRegister: isRegistrationOpen(game.game_date) && players.length < 12,
-    isRegistrationClosed: !isRegistrationOpen(game.game_date) || players.length >= 12,
-    reminderDueAt: game.reminder_due_at || registrationDeadlineIso(game.game_date),
-    reminderSentAt: game.reminder_sent_at || null,
+    canRegister: isRegistrationOpen(game.game_date),
+    isRegistrationClosed: !isRegistrationOpen(game.game_date),
+    reminderDueAt: registrationDeadlineIso(game.game_date),
+    reminderSentAt: null,
     createdAt: game.created_at,
     updatedAt: game.updated_at,
   };
 }
 
 function validateGameInput(payload) {
-  const title = String(payload?.title || '').trim() || 'משחק 3x3';
+  const title = String(payload?.title || '').trim() || 'משחק שישי';
   const location = String(payload?.location || '').trim();
   const notes = String(payload?.notes || '').trim();
   const gameDate = parseDate(payload?.gameDate);
@@ -491,9 +540,9 @@ function validateGameInput(payload) {
     return { error: 'יש להזין תאריך ושעה תקינים למשחק.' };
   }
 
-  if (gameDate.getTime() - Date.now() <= REGISTRATION_LEAD_MS) {
+  if (Date.now() >= new Date(registrationDeadlineIso(gameDate.toISOString())).getTime()) {
     return {
-      error: `יש ליצור משחק לפחות ${REGISTRATION_LEAD_HOURS} שעות לפני מועד המשחק כדי לאפשר הרשמה בזמן.`,
+      error: `יש ליצור משחק לפני מועד הנעילה: יום קודם בשעה ${String(REGISTRATION_LOCK_HOUR).padStart(2, '0')}:00.`,
     };
   }
 
@@ -505,96 +554,6 @@ function validateGameInput(payload) {
       gameDate: gameDate.toISOString(),
     },
   };
-}
-
-async function sendPushNotification(subscriptionPayload, payload) {
-  await webPush.sendNotification(subscriptionPayload, JSON.stringify(payload));
-}
-
-async function dispatchDueReminders(trigger) {
-  if (reminderDispatchInFlight) {
-    return { processedGames: 0, sent: 0, failed: 0, skipped: 'dispatch-in-flight' };
-  }
-
-  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    return { processedGames: 0, sent: 0, failed: 0, skipped: 'vapid-not-configured' };
-  }
-
-  reminderDispatchInFlight = true;
-
-  try {
-    const dueGames = all(
-      `SELECT id
-       FROM games
-       WHERE is_cancelled = 0
-         AND reminder_sent_at IS NULL
-         AND reminder_due_at IS NOT NULL
-         AND reminder_due_at <= ?
-         AND game_date > ?
-       ORDER BY game_date ASC`,
-      [nowIso(), nowIso()]
-    );
-
-    let processedGames = 0;
-    let sent = 0;
-    let failed = 0;
-
-    for (const dueGame of dueGames) {
-      const game = serializeGame(Number(dueGame.id));
-      if (!game) {
-        continue;
-      }
-
-      const subscriptions = all('SELECT id, payload FROM push_subscriptions ORDER BY id ASC');
-
-      for (const subscription of subscriptions) {
-        try {
-          await sendPushNotification(JSON.parse(subscription.payload), {
-            title: `נפתחה הרשמה: ${game.title}`,
-            message: `${formatDateTime(game.gameDate)} ב${game.location || 'מיקום שייקבע'}. יש להירשם עד עכשיו.`,
-            gameId: game.id,
-            gameDate: game.gameDate,
-          });
-          sent += 1;
-        } catch (_error) {
-          failed += 1;
-        }
-      }
-
-      const updatedAt = nowIso();
-      run('UPDATE games SET reminder_sent_at = ?, updated_at = ? WHERE id = ?', [
-        updatedAt,
-        updatedAt,
-        game.id,
-      ]);
-      processedGames += 1;
-    }
-
-    if (processedGames) {
-      persistDb();
-      console.log(`[reminders:${trigger}] processed=${processedGames} sent=${sent} failed=${failed}`);
-    }
-
-    return { processedGames, sent, failed };
-  } finally {
-    reminderDispatchInFlight = false;
-  }
-}
-
-function startReminderScheduler() {
-  if (reminderInterval) {
-    clearInterval(reminderInterval);
-  }
-
-  reminderInterval = setInterval(() => {
-    dispatchDueReminders('scheduler').catch((error) => {
-      console.error('Reminder dispatch failed:', error);
-    });
-  }, 5 * 60 * 1000);
-
-  dispatchDueReminders('startup').catch((error) => {
-    console.error('Initial reminder dispatch failed:', error);
-  });
 }
 
 async function bootstrapDatabase() {
@@ -622,22 +581,23 @@ async function bootstrapDatabase() {
       email TEXT NOT NULL UNIQUE,
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
-      profile_completed INTEGER NOT NULL DEFAULT 0,
+      password_hash TEXT,
+      profile_completed INTEGER NOT NULL DEFAULT 1,
+      is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS games (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL DEFAULT 'משחק 3x3',
+      title TEXT NOT NULL DEFAULT 'משחק שישי',
       location TEXT NOT NULL DEFAULT '',
       notes TEXT NOT NULL DEFAULT '',
       game_date TEXT NOT NULL,
       status TEXT NOT NULL,
       is_cancelled INTEGER NOT NULL DEFAULT 0,
       created_by_user_id INTEGER,
-      reminder_due_at TEXT,
-      reminder_sent_at TEXT,
+      lottery_signature TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -654,60 +614,39 @@ async function bootstrapDatabase() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS push_subscriptions (
+    CREATE TABLE IF NOT EXISTS game_lottery (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
-      endpoint TEXT NOT NULL UNIQUE,
-      p256dh TEXT NOT NULL,
-      auth TEXT NOT NULL,
-      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(game_id, user_id),
+      FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS lottery_stats (
+      user_id INTEGER PRIMARY KEY,
+      bench_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
 
-  ensureColumn('games', 'title', "TEXT NOT NULL DEFAULT 'משחק 3x3'");
+  ensureColumn('users', 'first_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('users', 'last_name', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn('users', 'password_hash', 'TEXT');
+  ensureColumn('users', 'profile_completed', 'INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('users', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
+
+  ensureColumn('games', 'title', "TEXT NOT NULL DEFAULT 'משחק שישי'");
   ensureColumn('games', 'location', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('games', 'notes', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('games', 'created_by_user_id', 'INTEGER');
-  ensureColumn('games', 'reminder_due_at', 'TEXT');
-  ensureColumn('games', 'reminder_sent_at', 'TEXT');
-  ensureColumn('users', 'first_name', "TEXT NOT NULL DEFAULT ''");
-  ensureColumn('users', 'last_name', "TEXT NOT NULL DEFAULT ''");
-  ensureColumn('users', 'profile_completed', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('games', 'lottery_signature', "TEXT NOT NULL DEFAULT ''");
 
-  const users = all('SELECT id, name, first_name, last_name FROM users');
-  users.forEach((user) => {
-    const existingFirst = String(user.first_name || '').trim();
-    const existingLast = String(user.last_name || '').trim();
-    if (existingFirst && existingLast) {
-      return;
-    }
-
-    const split = splitName(user.name);
-    run('UPDATE users SET first_name = ?, last_name = ?, updated_at = ? WHERE id = ?', [
-      existingFirst || split.firstName,
-      existingLast || split.lastName,
-      nowIso(),
-      user.id,
-    ]);
-  });
-
-  run("UPDATE games SET title = COALESCE(NULLIF(title, ''), 'משחק 3x3')");
-  run("UPDATE games SET location = COALESCE(location, '')");
-  run("UPDATE games SET notes = COALESCE(notes, '')");
-
-  const games = all('SELECT id, game_date FROM games');
+  const games = all('SELECT id FROM games');
   games.forEach((game) => {
-    const updatedAt = nowIso();
-    run(
-      `UPDATE games
-       SET reminder_due_at = COALESCE(reminder_due_at, ?),
-           updated_at = COALESCE(updated_at, ?)
-       WHERE id = ?`,
-      [registrationDeadlineIso(game.game_date), updatedAt, game.id]
-    );
     recalculateGame(Number(game.id));
   });
 
@@ -741,10 +680,11 @@ async function startServer() {
 
   app.get('/api/config', (_req, res) => {
     res.json({
-      vapidPublicKey: VAPID_PUBLIC_KEY,
-      closedGroupEnabled: true,
-      registrationLeadHours: REGISTRATION_LEAD_HOURS,
-      googleClientId: GOOGLE_CLIENT_ID,
+      vapidPublicKey: '',
+      closedGroupEnabled: false,
+      registrationLeadHours: 0,
+      registrationLockHour: REGISTRATION_LOCK_HOUR,
+      googleClientId: '',
       adminLoginEnabled: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD),
     });
   });
@@ -771,90 +711,40 @@ async function startServer() {
     });
   });
 
-  app.post('/api/auth/google', async (req, res) => {
-    const idToken = String(req.body?.idToken || '');
-    if (!idToken) {
-      return res.status(400).json({ message: 'חסר Google ID token.' });
-    }
-    if (!GOOGLE_CLIENT_ID || !googleOAuthClient) {
-      return res.status(500).json({ message: 'Google Sign-In אינו מוגדר בשרת.' });
-    }
-
-    try {
-      const ticket = await googleOAuthClient.verifyIdToken({
-        idToken,
-        audience: GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      const email = normalizeEmail(payload?.email || '');
-      const name = String(payload?.name || '').trim();
-      const givenName = String(payload?.given_name || '').trim();
-      const familyName = String(payload?.family_name || '').trim();
-      const isEmailVerified = Boolean(payload?.email_verified);
-
-      if (!email || !name || !isEmailVerified) {
-        return res.status(403).json({ message: 'חשבון Google לא מאומת או חסרים פרטים.' });
-      }
-
-      const approved = ensureApproved(email);
-      if (!approved.ok) {
-        return res.status(403).json({ message: approved.message });
-      }
-
-      const split = splitName(name);
-      const user = upsertUser(name, email, givenName || split.firstName, familyName || split.lastName);
-      return res.json({ user: serializeUser(user) });
-    } catch (_error) {
-      return res.status(401).json({ message: 'אימות Google נכשל.' });
-    }
+  app.get('/api/players/active', (_req, res) => {
+    const players = getActivePlayerRows().map((user) => ({ id: Number(user.id), name: user.name }));
+    return res.json({ players });
   });
 
-  app.patch('/api/users/:userId/profile', (req, res) => {
-    const userId = Number(req.params.userId);
-    const requester = getRequester(userId);
-    if (requester.error) {
-      return res.status(requester.error.status).json({ message: requester.error.message });
+  app.post('/api/auth/select-player', (req, res) => {
+    const playerId = Number(req.body?.playerId);
+    const confirmed = Boolean(req.body?.confirmed);
+    const password = String(req.body?.password || '').trim();
+
+    if (!confirmed) {
+      return res.status(400).json({ message: 'יש לאשר את ההרשמה בשם השחקן שנבחר.' });
     }
 
-    const firstName = String(req.body?.firstName || '').trim();
-    const lastName = String(req.body?.lastName || '').trim();
-    if (!firstName || !lastName) {
-      return res.status(400).json({ message: 'יש להזין שם פרטי ושם משפחה.' });
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: 'מזהה שחקן לא תקין.' });
     }
 
-    const displayName = `${firstName} ${lastName}`.trim();
-    run('UPDATE users SET first_name = ?, last_name = ?, name = ?, updated_at = ? WHERE id = ?', [
-      firstName,
-      lastName,
-      displayName,
-      nowIso(),
-      requester.user.id,
-    ]);
-    run('UPDATE users SET profile_completed = 1, updated_at = ? WHERE id = ?', [
-      nowIso(),
-      requester.user.id,
-    ]);
-    persistDb();
-
-    const updated = getUserRow(requester.user.id);
-    return res.json({ user: serializeUser(updated) });
-  });
-
-  app.post('/api/auth/register', (req, res) => {
-    const name = String(req.body?.name || '').trim();
-    const email = normalizeEmail(req.body?.email || '');
-
-    if (!name || !email) {
-      return res.status(400).json({ message: 'יש להזין שם ואימייל.' });
+    const player = getUserRow(playerId);
+    if (!player || Number(player.is_active) !== 1) {
+      return res.status(404).json({ message: 'השחקן לא נמצא ברשימת הפעילים.' });
     }
 
-    const approved = ensureApproved(email);
-    if (!approved.ok) {
-      return res.status(403).json({ message: approved.message });
+    // If player has a password set, require password verification
+    if (player.password_hash) {
+      if (!password) {
+        return res.status(401).json({ message: 'נדרשת סיסמה להתחברות.' });
+      }
+      if (!verifyPassword(password, player.password_hash)) {
+        return res.status(401).json({ message: 'סיסמה שגויה.' });
+      }
     }
 
-    const user = upsertUser(name, email);
-    return res.status(201).json({ user: serializeUser(user) });
+    return res.json({ user: serializeUser(player) });
   });
 
   app.get('/api/users/:userId', (req, res) => {
@@ -867,15 +757,97 @@ async function startServer() {
     return res.json({ user: serializeUser(requester.user) });
   });
 
+  app.get('/api/admin/players', (req, res) => {
+    const requester = ensureAdmin(Number(req.query.userId || 0), String(req.query.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const players = all(
+      `SELECT id, name, is_active, created_at
+       FROM users
+       ORDER BY is_active DESC, name COLLATE NOCASE ASC, id ASC`
+    ).map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      isActive: Number(row.is_active) === 1,
+      createdAt: row.created_at,
+    }));
+
+    return res.json({ players });
+  });
+
+  app.post('/api/admin/players', (req, res) => {
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const created = createPlayer(req.body?.name);
+    if (created.error) {
+      return res.status(400).json({ message: created.error });
+    }
+
+    persistDb();
+    return res.status(201).json({ player: { id: Number(created.user.id), name: created.user.name } });
+  });
+
+  app.delete('/api/admin/players/:playerId', (req, res) => {
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const playerId = Number(req.params.playerId);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: 'מזהה שחקן לא תקין.' });
+    }
+
+    const existing = get('SELECT id FROM users WHERE id = ?', [playerId]);
+    if (!existing) {
+      return res.status(404).json({ message: 'השחקן לא נמצא.' });
+    }
+
+    run('UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?', [nowIso(), playerId]);
+    persistDb();
+    return res.json({ ok: true });
+  });
+
+  app.post('/api/admin/players/:playerId/password', (req, res) => {
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const playerId = Number(req.params.playerId);
+    const newPassword = String(req.body?.password || '').trim();
+
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: 'מזהה שחקן לא תקין.' });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({ message: 'יש להזין סיסמה.' });
+    }
+
+    const existing = get('SELECT id FROM users WHERE id = ?', [playerId]);
+    if (!existing) {
+      return res.status(404).json({ message: 'השחקן לא נמצא.' });
+    }
+
+    const passwordHash = hashPassword(newPassword);
+    run('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', [passwordHash, nowIso(), playerId]);
+    persistDb();
+    return res.json({ ok: true });
+  });
+
   app.get('/api/games/current', (req, res) => {
     const userId = req.query.userId ? Number(req.query.userId) : null;
     const gameId = getUpcomingGameId();
-
     if (!gameId) {
       return res.json({ game: null });
     }
 
-    recalculateGame(gameId);
     return res.json({ game: serializeGame(gameId, userId) });
   });
 
@@ -888,22 +860,9 @@ async function startServer() {
   });
 
   app.post('/api/games', (req, res) => {
-    const userId = Number(req.body?.userId);
-    const adminToken = String(req.body?.adminToken || '');
-    let requesterUser = null;
-
-    if (!isValidAdminToken(adminToken)) {
-      const requester = getRequester(userId);
-      if (requester.error) {
-        return res.status(requester.error.status).json({ message: requester.error.message });
-      }
-
-      const profileCheck = ensureProfileCompleted(requester.user);
-      if (!profileCheck.ok) {
-        return res.status(409).json({ message: profileCheck.message });
-      }
-
-      requesterUser = requester.user;
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
     }
 
     if (getUpcomingGamesCount() >= MAX_ACTIVE_GAMES) {
@@ -919,43 +878,19 @@ async function startServer() {
 
     const createdAt = nowIso();
     run(
-      `INSERT INTO games (
-        title,
-        location,
-        notes,
-        game_date,
-        status,
-        is_cancelled,
-        created_by_user_id,
-        reminder_due_at,
-        reminder_sent_at,
-        created_at,
-        updated_at
-      ) VALUES (?, ?, ?, ?, 'OPEN', 0, ?, ?, NULL, ?, ?)`,
-      [
-        validated.value.title,
-        validated.value.location,
-        validated.value.notes,
-        validated.value.gameDate,
-        requesterUser ? requesterUser.id : null,
-        registrationDeadlineIso(validated.value.gameDate),
-        createdAt,
-        createdAt,
-      ]
+      `INSERT INTO games (title, location, notes, game_date, status, is_cancelled, created_by_user_id, lottery_signature, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'OPEN', 0, NULL, '', ?, ?)`,
+      [validated.value.title, validated.value.location, validated.value.notes, validated.value.gameDate, createdAt, createdAt]
     );
 
     const row = get('SELECT last_insert_rowid() AS id');
     const gameId = Number(row.id);
     recalculateGame(gameId);
-    return res.status(201).json({
-      game: serializeGame(gameId, requesterUser ? requesterUser.id : null),
-      message: 'המשחק נוצר. שים לב: גם מי שיצר את המשחק חייב להירשם אליו בנפרד.',
-    });
+    return res.status(201).json({ game: serializeGame(gameId, null), message: 'המשחק נוצר על ידי אדמין.' });
   });
 
   app.patch('/api/games/:gameId', (req, res) => {
-    const userId = Number(req.body?.userId);
-    const requester = ensureAdmin(userId, String(req.body?.adminToken || ''));
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
     if (requester.error) {
       return res.status(requester.error.status).json({ message: requester.error.message });
     }
@@ -977,32 +912,18 @@ async function startServer() {
 
     run(
       `UPDATE games
-       SET title = ?,
-           location = ?,
-           notes = ?,
-           game_date = ?,
-           reminder_due_at = ?,
-           reminder_sent_at = NULL,
-           updated_at = ?
+       SET title = ?, location = ?, notes = ?, game_date = ?, lottery_signature = '', updated_at = ?
        WHERE id = ?`,
-      [
-        validated.value.title,
-        validated.value.location,
-        validated.value.notes,
-        validated.value.gameDate,
-        registrationDeadlineIso(validated.value.gameDate),
-        nowIso(),
-        gameId,
-      ]
+      [validated.value.title, validated.value.location, validated.value.notes, validated.value.gameDate, nowIso(), gameId]
     );
 
+    run('DELETE FROM game_lottery WHERE game_id = ?', [gameId]);
     recalculateGame(gameId);
-    return res.json({ game: serializeGame(gameId, requester.user.id) });
+    return res.json({ game: serializeGame(gameId, null) });
   });
 
   app.delete('/api/games/:gameId', (req, res) => {
-    const userId = Number(req.body?.userId);
-    const requester = ensureAdmin(userId, String(req.body?.adminToken || ''));
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
     if (requester.error) {
       return res.status(requester.error.status).json({ message: requester.error.message });
     }
@@ -1029,11 +950,6 @@ async function startServer() {
       return res.status(requester.error.status).json({ message: requester.error.message });
     }
 
-    const profileCheck = ensureProfileCompleted(requester.user);
-    if (!profileCheck.ok) {
-      return res.status(409).json({ message: profileCheck.message });
-    }
-
     const gameId = getUpcomingGameId();
     if (!gameId) {
       return res.status(404).json({ message: 'אין כרגע משחק פתוח להרשמה.' });
@@ -1046,27 +962,21 @@ async function startServer() {
 
     if (!isRegistrationOpen(currentGame.game_date)) {
       return res.status(409).json({
-        message: `ההרשמה נסגרה ${REGISTRATION_LEAD_HOURS} שעות לפני מועד המשחק.`,
+        message: `ההרשמה נסגרה. הנעילה מתבצעת יום לפני המשחק בשעה ${String(REGISTRATION_LOCK_HOUR).padStart(2, '0')}:00.`,
       });
     }
 
-    const existing = get(
-      'SELECT id FROM registrations WHERE game_id = ? AND user_id = ?',
-      [gameId, requester.user.id]
-    );
+    const existing = get('SELECT id FROM registrations WHERE game_id = ? AND user_id = ?', [gameId, requester.user.id]);
     if (existing) {
       return res.status(409).json({ message: 'כבר נרשמת למשחק.' });
     }
 
     const countRow = get('SELECT COUNT(*) AS count FROM registrations WHERE game_id = ?', [gameId]);
     const currentCount = Number(countRow.count);
-    if (currentCount >= 12) {
-      return res.status(409).json({ message: 'המשחק מלא (12 שחקנים).' });
-    }
 
     run(
       `INSERT INTO registrations (game_id, user_id, position, role, joined_at)
-       VALUES (?, ?, ?, 'WAITING', ?)`,
+       VALUES (?, ?, ?, 'PLAYING', ?)`,
       [gameId, requester.user.id, currentCount + 1, nowIso()]
     );
 
@@ -1086,136 +996,20 @@ async function startServer() {
       return res.status(404).json({ message: 'אין כרגע משחק פעיל להסרה.' });
     }
 
-    const existing = get(
-      'SELECT id FROM registrations WHERE game_id = ? AND user_id = ?',
-      [gameId, requester.user.id]
-    );
+    const existing = get('SELECT id FROM registrations WHERE game_id = ? AND user_id = ?', [gameId, requester.user.id]);
     if (!existing) {
       return res.status(409).json({ message: 'לא נמצאה הרשמה פעילה למשתמש הזה.' });
     }
 
     run('DELETE FROM registrations WHERE id = ?', [existing.id]);
     reorderPositions(gameId);
+    run('UPDATE games SET lottery_signature = ? WHERE id = ?', ['', gameId]);
     recalculateGame(gameId);
     return res.json({ game: serializeGame(gameId, requester.user.id) });
   });
 
-  app.post('/api/push/subscribe', (req, res) => {
-    const userId = Number(req.body?.userId);
-    const subscription = req.body?.subscription;
-
-    const requester = getRequester(userId);
-    if (requester.error) {
-      return res.status(requester.error.status).json({ message: requester.error.message });
-    }
-    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
-      return res.status(400).json({ message: 'נתוני subscription לא תקינים.' });
-    }
-
-    const existing = get('SELECT id FROM push_subscriptions WHERE endpoint = ?', [subscription.endpoint]);
-    if (existing) {
-      run(
-        `UPDATE push_subscriptions
-         SET user_id = ?, p256dh = ?, auth = ?, payload = ?, updated_at = ?
-         WHERE id = ?`,
-        [
-          requester.user.id,
-          subscription.keys.p256dh,
-          subscription.keys.auth,
-          JSON.stringify(subscription),
-          nowIso(),
-          existing.id,
-        ]
-      );
-    } else {
-      run(
-        `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, payload, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          requester.user.id,
-          subscription.endpoint,
-          subscription.keys.p256dh,
-          subscription.keys.auth,
-          JSON.stringify(subscription),
-          nowIso(),
-          nowIso(),
-        ]
-      );
-    }
-
-    persistDb();
-    return res.status(201).json({ ok: true });
-  });
-
-  app.post('/api/push/unsubscribe', (req, res) => {
-    const userId = Number(req.body?.userId);
-    const endpoint = String(req.body?.endpoint || '').trim();
-
-    const requester = getRequester(userId);
-    if (requester.error) {
-      return res.status(requester.error.status).json({ message: requester.error.message });
-    }
-
-    if (endpoint) {
-      run('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?', [requester.user.id, endpoint]);
-    } else {
-      run('DELETE FROM push_subscriptions WHERE user_id = ?', [requester.user.id]);
-    }
-
-    persistDb();
-    return res.json({ ok: true });
-  });
-
-  app.post('/api/push/test', async (req, res) => {
-    const userId = Number(req.body?.userId);
-    const requester = getRequester(userId);
-    if (requester.error) {
-      return res.status(requester.error.status).json({ message: requester.error.message });
-    }
-
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-      return res.status(409).json({ message: 'Push אינו מוגדר בשרת (חסרים VAPID keys).' });
-    }
-
-    const subscriptions = all(
-      'SELECT id, payload FROM push_subscriptions WHERE user_id = ? ORDER BY id ASC',
-      [requester.user.id]
-    );
-    if (!subscriptions.length) {
-      return res.status(404).json({ message: 'לא נמצאו subscriptions למשתמש הזה.' });
-    }
-
-    let sent = 0;
-    let failed = 0;
-    for (const subscription of subscriptions) {
-      try {
-        await sendPushNotification(JSON.parse(subscription.payload), {
-          title: 'בדיקת התראה',
-          message: `ההתראות עובדות עבור ${requester.user.name}.`,
-          kind: 'TEST',
-        });
-        sent += 1;
-      } catch (_error) {
-        failed += 1;
-      }
-    }
-
-    return res.json({ sent, failed });
-  });
-
-  app.post('/api/reminders/dispatch', async (req, res) => {
-    const providedSecret = String(req.body?.secret || '');
-    if (!REMINDER_SECRET || providedSecret !== REMINDER_SECRET) {
-      return res.status(403).json({ message: 'הרשאה חסרה לשליחת תזכורות.' });
-    }
-
-    const result = await dispatchDueReminders('manual');
-    return res.json(result);
-  });
-
   if (fs.existsSync(FRONTEND_DIST_DIR)) {
     app.use(express.static(FRONTEND_DIST_DIR));
-
     app.get(/^(?!\/api).*/, (_req, res) => {
       res.sendFile(path.join(FRONTEND_DIST_DIR, 'index.html'));
     });
@@ -1236,8 +1030,6 @@ async function startServer() {
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);
   });
-
-  startReminderScheduler();
 }
 
 startServer().catch((error) => {
