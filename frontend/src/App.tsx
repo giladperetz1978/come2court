@@ -397,7 +397,7 @@ function App() {
       return
     }
 
-    const confirmed = window.confirm(`האם אתה "${selectedPlayer.name}" ומאשר את ההרשמה למשחק הקרוב?`)
+    const confirmed = window.confirm('לאחר הכניסה לאפליקציה יש להירשם למשחק הקרוב')
     if (!confirmed) {
       return
     }
