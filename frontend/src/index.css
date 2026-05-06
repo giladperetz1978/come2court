@@ -424,6 +424,12 @@ textarea {
   color: white;
 }
 
+.cta-secondary {
+  background: rgba(255, 173, 95, 0.16);
+  color: rgba(255, 173, 95, 0.9);
+  border: 1px solid rgba(255, 173, 95, 0.3);
+}
+
 .cta-danger {
   background: rgba(255, 90, 116, 0.2);
   color: #ffbac6;

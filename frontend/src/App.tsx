@@ -206,6 +206,31 @@ function gameToForm(game: Game): GameFormState {
   }
 }
 
+function createGoogleCalendarUrl(game: Game): string {
+  const startTime = new Date(game.gameDate)
+  const endTime = new Date(startTime.getTime() + 90 * 60000) // 90 minutes
+
+  const formatTime = (date: Date): string => {
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(date.getUTCDate()).padStart(2, '0')
+    const hours = String(date.getUTCHours()).padStart(2, '0')
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0')
+    return `${year}${month}${day}T${hours}${minutes}${seconds}Z`
+  }
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: game.title || 'משחק שישי',
+    dates: `${formatTime(startTime)}/${formatTime(endTime)}`,
+    location: game.location || '',
+    description: game.notes || 'משחק בסדרת YomShishi 3x3',
+  })
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -797,6 +822,15 @@ function App() {
                   )}
 
                   <div className="row actions-row">
+                    {spotlightGame && (
+                      <button
+                        className="cta cta-secondary"
+                        onClick={() => window.open(createGoogleCalendarUrl(spotlightGame), '_blank')}
+                      >
+                        📅 הוסף ללוח השנה
+                      </button>
+                    )}
+
                     {user && game && !isUserInGame ? (
                       <button
                         disabled={isBusy || game.isRegistrationClosed}
@@ -838,6 +872,13 @@ function App() {
                     <strong>{nextGame.playersCount}</strong>
                   </div>
                 </div>
+                <button
+                  className="cta cta-secondary"
+                  style={{ width: '100%', marginTop: '12px' }}
+                  onClick={() => window.open(createGoogleCalendarUrl(nextGame), '_blank')}
+                >
+                  📅 הוסף ללוח השנה
+                </button>
               </article>
             )}
 
@@ -1013,6 +1054,13 @@ function App() {
                 <p className="muted roster-meta">
                   {rosterGame.title} | {formatGameDateTime(rosterGame.gameDate)}
                 </p>
+                <button
+                  className="cta cta-secondary"
+                  style={{ width: '100%', marginBottom: '16px' }}
+                  onClick={() => window.open(createGoogleCalendarUrl(rosterGame), '_blank')}
+                >
+                  📅 הוסף ללוח השנה
+                </button>
                 <ul className="players players-grid">
                   {rosterGame.players.length ? (
                     rosterGame.players.map((player) => (
