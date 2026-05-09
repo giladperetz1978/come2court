@@ -385,7 +385,11 @@ function pickBenchedUsersByRotation(candidateUserIds, benchCount) {
   return picked;
 }
 
-function resolveLottery(registrations) {
+function resolveLottery(registrations, shouldRunLottery) {
+  if (!shouldRunLottery) {
+    return { benchCount: 0, candidateUserIds: [] };
+  }
+
   const totalPlayers = registrations.length;
   if (totalPlayers <= 9 || totalPlayers === 12) {
     return { benchCount: 0, candidateUserIds: [] };
@@ -428,7 +432,8 @@ function recalculateGame(gameId) {
 
   const totalPlayers = registrations.length;
   const isCancelled = Number(game.is_cancelled) === 1;
-  const lotteryPlan = resolveLottery(registrations);
+  const shouldRunLottery = !isRegistrationOpen(game.game_date);
+  const lotteryPlan = resolveLottery(registrations, shouldRunLottery);
   const signature = `${registrations.map((item) => Number(item.user_id)).join(',')}|${lotteryPlan.benchCount}|${lotteryPlan.candidateUserIds.join(',')}`;
 
   let benchedUserIds = [];
@@ -470,6 +475,20 @@ function recalculateGame(gameId) {
   );
 
   persistDb();
+}
+
+function recalculateLockedGames() {
+  const gameIds = getUpcomingGameIds(MAX_ACTIVE_GAMES);
+  gameIds.forEach((gameId) => {
+    const game = getGameRow(gameId);
+    if (!game) {
+      return;
+    }
+
+    if (!isRegistrationOpen(game.game_date)) {
+      recalculateGame(gameId);
+    }
+  });
 }
 
 function serializeGame(gameId, viewerUserId = null) {
@@ -1082,6 +1101,11 @@ async function startServer() {
   app.use((_req, res) => {
     res.status(404).json({ message: 'Endpoint לא נמצא.' });
   });
+
+  recalculateLockedGames();
+  setInterval(() => {
+    recalculateLockedGames();
+  }, 60000);
 
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);
