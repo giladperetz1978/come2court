@@ -23,7 +23,7 @@ type PlayerOption = {
 type AdminPlayer = {
   id: number
   name: string
-  isActive: boolean
+  status: 'pending' | 'active' | 'blocked'
   createdAt: string
 }
 
@@ -104,10 +104,1354 @@ type LotteryOverviewResponse = {
   players: LotteryOverviewPlayer[]
 }
 
+type AppLanguage = 'en' | 'he' | 'fr' | 'de' | 'es' | 'ru' | 'uk' | 'hi' | 'zh'
+type RegistrationRole = 'admin' | 'player'
+
+type LocalRegistrationProfile = {
+  role: RegistrationRole
+  username: string
+  password: string
+  groupId: string
+}
+
+type LocalGroup = {
+  id: string
+  name: string
+  createdBy: string
+}
+
+type LocalGameTypeConfig = {
+  id: string
+  name: string
+  minPlayers: number
+  maxPlayersX: number
+  enableMaxPlayersY: boolean
+  maxPlayersY: number
+  lockDateTime: string
+  enableLottery: boolean
+  nextGameDateTime: string
+  repeatWeekly: boolean
+  repeatDayOfWeek: number
+  repeatTime: string
+}
+
+type LocalGroupConfig = {
+  groupId: string
+  gameTypes: LocalGameTypeConfig[]
+}
+
+const SUPPORTED_LANGUAGES: { code: AppLanguage; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'he', label: 'עברית' },
+  { code: 'fr', label: 'Francais' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'es', label: 'Espanol' },
+  { code: 'ru', label: 'Russkiy' },
+  { code: 'uk', label: 'Ukrainska' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'zh', label: 'Zhongwen' },
+]
+
+const RTL_LANGUAGES = new Set<AppLanguage>(['he'])
+const LANGUAGE_KEY = 'come2court_language_v2'
+const REGISTRATION_PROFILE_KEY = 'come2court_registration_profile_v2'
+const GROUPS_KEY = 'come2court_groups_v2'
+const GROUP_CONFIGS_KEY = 'come2court_group_configs_v2'
+const SELECTED_GROUP_KEY = 'come2court_selected_group_v2'
+
+const I18N: Record<AppLanguage, Record<string, string>> = {
+  en: {
+    language: 'Language',
+    initialSetup: 'Initial Setup',
+    chooseLanguage: 'Choose language',
+    registerAs: 'Register as',
+    admin: 'Admin',
+    player: 'Player',
+    username: 'Username',
+    password: 'Password',
+    passwordConfirm: 'Confirm password',
+    finishSetup: 'Finish setup',
+    passwordMismatch: 'Passwords do not match.',
+    passwordShort: 'Password must be at least 4 characters.',
+    profileSelectTitle: 'Sign in by active players list',
+    selectPlayer: 'Select player',
+    playerPasswordPlaceholder: 'Password (if set)',
+    playerLogin: 'Enter',
+    adminLoginTitle: 'Admin sign in',
+    adminUsernamePlaceholder: 'Admin username',
+    adminPasswordPlaceholder: 'Admin password',
+    adminLoginButton: 'Sign in as admin',
+    mainTab: 'Games & Registration',
+    rulesTab: 'How registration works',
+    lotteryTab: 'Lottery rotation',
+    groupName: 'Group name',
+    chooseGroup: 'Choose group',
+    createGroupHint: 'Admin creates a new group. Player joins an existing group.',
+    noGroupsYet: 'No groups yet. Create a group as admin first.',
+    groupTabTitle: 'Groups',
+    gameTypeTabTitle: 'Game types',
+    adminAsPlayer: 'Enter as player',
+    adminSetupTitle: 'Admin game setup',
+    gameTypeName: 'Game type name',
+    minPlayersCount: 'Minimum players',
+    maxPlayersX: 'Max players X',
+    enableMaxPlayersY: 'Enable max players Y',
+    maxPlayersY: 'Max players Y',
+    lockPlayersCount: 'Lock players count',
+    lockTime: 'Lock date and time',
+    enableLottery: 'Enable lottery for overflow players',
+    nextGameTime: 'Next game date and time',
+    weeklyRepeat: 'Repeat weekly',
+    repeatDay: 'Repeat day',
+    repeatTime: 'Repeat time',
+    saveGameType: 'Save game type',
+    addGameType: 'Add game type',
+    maxThreeGameTypes: 'Up to 3 game types per group',
+    addGroup: 'Add group',
+    maxThreeGroups: 'Up to 3 groups',
+    adminLogout: 'Exit admin',
+    signedInSession: 'Active session',
+    signOut: 'Sign out',
+    rulesSummaryPrefix: 'Rules',
+    rulesActiveGroup: 'Active group',
+    rulesActiveGameType: 'Active game type',
+    rulesMinPlayers: 'Minimum players',
+    rulesMaxX: 'Maximum X',
+    rulesMaxY: 'Maximum Y',
+    disabled: 'Disabled',
+    yesLabel: 'Yes',
+    noLabel: 'No',
+    statusLabel: 'Status',
+    playingLabel: 'Playing',
+    notPlayingLabel: 'Not playing',
+    onBenchThisRound: 'On bench this round',
+    registeredCount: 'Registered',
+    locationTbd: 'Location to be confirmed',
+    registrationLock: 'Registration lock',
+    registrationClosedMessagePrefix: 'Registration is closed. Lock happens one day before the game at',
+    registrationClosedShort: 'Registration closed',
+    joinGame: 'Join game',
+    cancelRegistration: 'Cancel registration',
+    noPlannedGame: 'No game is currently planned. Admin can create a new game.',
+    upcomingGameTitle: 'Upcoming game',
+    nextGameTitle: 'Next game',
+    addToCalendar: 'Add to calendar',
+    activePlayersManagement: 'Active players management',
+    newPlayerNamePlaceholder: 'New player name',
+    addPlayer: 'Add player',
+    activeLabel: 'active',
+    inactiveLabel: 'inactive',
+    setPasswordPlaceholder: 'Set password',
+    savePassword: 'Save password',
+    deleteAction: 'Delete',
+    editGameTitle: 'Edit game',
+    createGameAdminOnlyTitle: 'Create new game (admin only)',
+    editPrefix: 'Edit',
+    deletePrefix: 'Delete',
+    gameTitlePlaceholder: 'Game title',
+    locationPlaceholder: 'Location',
+    notesPlaceholder: 'Notes',
+    saveChanges: 'Save changes',
+    createGame: 'Create game',
+    cancelAction: 'Cancel',
+    registrationsUpcomingGame: 'Registrations for upcoming game',
+    registrationsNextGame: 'Registrations for next game',
+    noRegistrationsYet: 'No registrations yet for this game.',
+    customRulesTitle: 'Customized rules by group and game type',
+    overflowLotteryLabel: 'Overflow lottery',
+    noCustomRulesYet: 'No customized rules are defined yet for this group and game type.',
+    lotteryWhoOutTitle: 'Who moved to bench in lottery rounds',
+    benchedLabel: 'Benched',
+    timesLabel: 'times',
+    benchedCurrentRound: 'Benched in current round',
+    playingCurrentRound: 'Playing in current round',
+    notRegisteredCurrentGame: 'Not registered for current game',
+    yourPosition: 'Your position',
+    adminCredentialsIncorrect: 'Admin credentials are incorrect or not configured.',
+    playerMarkedInactive: 'Player marked as inactive.',
+    deletePlayerFailed: 'Failed to delete player.',
+    playerPasswordUpdated: 'Player password updated.',
+    passwordUpdateFailed: 'Password update failed.',
+    loadDataFailed: 'Failed to load data.',
+    adminLoginSuccess: 'Admin login successful.',
+    choosePlayerRequired: 'Please choose a player from the list.',
+    selectedPlayerNotFound: 'Selected player was not found.',
+    playerLoginConfirmMessage: 'After entering the app, please register for the upcoming game.',
+    playerLoginSuccess: 'Login completed. Please register for the upcoming game.',
+    playerLoginFailed: 'Login failed.',
+    joinGameSuccess: 'Successfully joined the game.',
+    joinGameFailed: 'Cannot join right now.',
+    leaveGameSuccess: 'Registration cancelled.',
+    leaveGameFailed: 'Cannot remove registration right now.',
+    adminOnlyCreateGame: 'Only admin can create new games.',
+    gameUpdatedSuccess: 'Game updated successfully.',
+    gameCreatedSuccess: 'Game created successfully.',
+    saveGameFailed: 'Failed to save game.',
+    gameDeletedSuccess: 'Game deleted.',
+    deleteGameFailed: 'Failed to delete game.',
+    playerAddedSuccess: 'Player added to active list.',
+    addPlayerFailed: 'Failed to add player.',
+    pendingApprovalsTitle: 'Pending approvals',
+    approveButton: 'Approve',
+    rejectButton: 'Reject',
+    blockButton: 'Block',
+    noPendingUsers: 'No users pending approval.',
+    noActivePlayersYet: 'No active players yet.',
+    playerApprovedSuccess: 'Player approved successfully.',
+    playerRejectedSuccess: 'Player rejected.',
+    playerBlockedSuccess: 'Player blocked.',
+    approvePlayerFailed: 'Failed to approve player.',
+    rejectPlayerFailed: 'Failed to reject player.',
+    blockPlayerFailed: 'Failed to block player.',
+    lotteryDisabledRule: 'When lottery is disabled, no overflow lottery is applied.',
+    upcomingGame: 'Upcoming game',
+    noUpcomingLotteryGame: 'There is no upcoming game to display lottery results.',
+    lotteryRuleNoY: 'If Y is disabled and players > X, lottery runs across all registered players with equal rotation.',
+    lotteryRuleWithY: 'If Y is enabled, lottery runs when players > X and < Y, or when players > Y.',
+  },
+  he: {
+    language: 'שפה',
+    initialSetup: 'הגדרה ראשונית',
+    chooseLanguage: 'בחירת שפה',
+    registerAs: 'רישום כ',
+    admin: 'אדמין',
+    player: 'שחקן',
+    username: 'שם משתמש',
+    password: 'סיסמה',
+    passwordConfirm: 'אימות סיסמה',
+    finishSetup: 'סיום הגדרה',
+    passwordMismatch: 'הסיסמאות אינן תואמות.',
+    passwordShort: 'הסיסמה חייבת להכיל לפחות 4 תווים.',
+    profileSelectTitle: 'כניסה לפי רשימת שחקנים פעילים',
+    selectPlayer: 'בחר שחקן',
+    playerPasswordPlaceholder: 'סיסמה (אם קיימת)',
+    playerLogin: 'אישור כניסה',
+    adminLoginTitle: 'כניסת אדמין',
+    adminUsernamePlaceholder: 'שם משתמש אדמין',
+    adminPasswordPlaceholder: 'סיסמת אדמין',
+    adminLoginButton: 'כניסה כאדמין',
+    mainTab: 'משחקים והרשמה',
+    rulesTab: 'איך ההרשמה עובדת',
+    lotteryTab: 'סבב הגרלות',
+    groupName: 'שם קבוצה',
+    chooseGroup: 'בחירת קבוצה',
+    createGroupHint: 'אדמין יוצר קבוצה חדשה. שחקן מצטרף לקבוצה קיימת.',
+    noGroupsYet: 'אין קבוצות עדיין. קודם צריך ליצור קבוצה כאדמין.',
+    groupTabTitle: 'קבוצות',
+    gameTypeTabTitle: 'סוגי משחק',
+    adminAsPlayer: 'כניסה כשחקן',
+    adminSetupTitle: 'הגדרות משחק לאדמין',
+    gameTypeName: 'שם סוג המשחק',
+    minPlayersCount: 'כמות מינימלית',
+    maxPlayersX: 'כמות מקסימום X',
+    enableMaxPlayersY: 'הפעלת מקסימום Y',
+    maxPlayersY: 'כמות מקסימום Y',
+    lockPlayersCount: 'כמות שחקנים לנעילה',
+    lockTime: 'זמן ותאריך נעילה',
+    enableLottery: 'הפעלת הגרלה לעודפים',
+    nextGameTime: 'תאריך ושעת המשחק הקרוב',
+    weeklyRepeat: 'חזרה שבועית',
+    repeatDay: 'יום קבוע',
+    repeatTime: 'שעה קבועה',
+    saveGameType: 'שמירת סוג משחק',
+    addGameType: 'הוספת סוג משחק',
+    maxThreeGameTypes: 'עד 3 סוגי משחק לכל קבוצה',
+    addGroup: 'הוספת קבוצה',
+    maxThreeGroups: 'עד 3 קבוצות',
+    adminLogout: 'יציאה מאדמין',
+    signedInSession: 'כניסה פעילה',
+    signOut: 'התנתקות',
+    rulesSummaryPrefix: 'חוקים',
+    rulesActiveGroup: 'קבוצה פעילה',
+    rulesActiveGameType: 'סוג משחק פעיל',
+    rulesMinPlayers: 'כמות מינימלית',
+    rulesMaxX: 'כמות מקסימום X',
+    rulesMaxY: 'כמות מקסימום Y',
+    disabled: 'לא פעיל',
+    yesLabel: 'כן',
+    noLabel: 'לא',
+    statusLabel: 'סטטוס',
+    playingLabel: 'משחק',
+    notPlayingLabel: 'לא משחק',
+    onBenchThisRound: 'בחוץ בסבב',
+    registeredCount: 'נרשמו',
+    locationTbd: 'מיקום יעודכן',
+    registrationLock: 'סגירת הרשמה',
+    registrationClosedMessagePrefix: 'ההרשמה נסגרה. הנעילה מתבצעת יום לפני המשחק בשעה',
+    registrationClosedShort: 'ההרשמה נסגרה',
+    joinGame: 'הרשמה למשחק',
+    cancelRegistration: 'ביטול הרשמה',
+    noPlannedGame: 'אין כרגע משחק מתוכנן. אדמין יכול לפתוח משחק חדש.',
+    upcomingGameTitle: 'המשחק הקרוב',
+    nextGameTitle: 'המשחק הבא',
+    addToCalendar: 'הוסף ללוח השנה',
+    activePlayersManagement: 'ניהול שחקנים פעילים',
+    newPlayerNamePlaceholder: 'שם שחקן חדש',
+    addPlayer: 'הוספת שחקן',
+    activeLabel: 'פעיל',
+    inactiveLabel: 'לא פעיל',
+    setPasswordPlaceholder: 'הגדר סיסמה',
+    savePassword: 'שמור סיסמה',
+    deleteAction: 'מחיקה',
+    editGameTitle: 'עריכת משחק',
+    createGameAdminOnlyTitle: 'פתיחת משחק חדש (אדמין בלבד)',
+    editPrefix: 'עריכת',
+    deletePrefix: 'מחיקת',
+    gameTitlePlaceholder: 'כותרת המשחק',
+    locationPlaceholder: 'מיקום',
+    notesPlaceholder: 'הערות',
+    saveChanges: 'שמירת שינויים',
+    createGame: 'יצירת משחק',
+    cancelAction: 'ביטול',
+    registrationsUpcomingGame: 'נרשמים למשחק הקרוב',
+    registrationsNextGame: 'נרשמים למשחק הבא',
+    noRegistrationsYet: 'עדיין אין נרשמים למשחק הזה.',
+    customRulesTitle: 'כללים מותאמים לקבוצה וסוג משחק',
+    overflowLotteryLabel: 'הגרלה לעודפים',
+    noCustomRulesYet: 'עדיין לא הוגדרו כללים מותאמים לקבוצה וסוג משחק.',
+    lotteryWhoOutTitle: 'מי יצא בסבב ההגרלות',
+    benchedLabel: 'ישב בחוץ',
+    timesLabel: 'פעמים',
+    benchedCurrentRound: 'בחוץ בסבב הנוכחי',
+    playingCurrentRound: 'משחק בסבב הנוכחי',
+    notRegisteredCurrentGame: 'לא רשום למשחק הנוכחי',
+    yourPosition: 'המיקום שלך',
+    adminCredentialsIncorrect: 'פרטי אדמין שגויים או לא הוגדרו.',
+    playerMarkedInactive: 'השחקן סומן כלא פעיל.',
+    deletePlayerFailed: 'מחיקת שחקן נכשלה.',
+    playerPasswordUpdated: 'סיסמת השחקן עודכנה.',
+    passwordUpdateFailed: 'עדכון סיסמה נכשל.',
+    loadDataFailed: 'טעינת נתונים נכשלה.',
+    adminLoginSuccess: 'כניסת אדמין הצליחה.',
+    choosePlayerRequired: 'יש לבחור שחקן מהרשימה.',
+    selectedPlayerNotFound: 'השחקן שנבחר לא נמצא.',
+    playerLoginConfirmMessage: 'לאחר הכניסה לאפליקציה יש להירשם למשחק הקרוב',
+    playerLoginSuccess: 'אחרי לחיצה על אישור יש להירשם למשחק הקרוב.',
+    playerLoginFailed: 'הכניסה נכשלה.',
+    joinGameSuccess: 'נרשמת בהצלחה למשחק.',
+    joinGameFailed: 'לא ניתן להצטרף כרגע.',
+    leaveGameSuccess: 'ביטלת הרשמה למשחק.',
+    leaveGameFailed: 'לא ניתן להסיר כרגע.',
+    adminOnlyCreateGame: 'רק אדמין יכול לפתוח משחקים חדשים.',
+    gameUpdatedSuccess: 'המשחק עודכן בהצלחה.',
+    gameCreatedSuccess: 'המשחק נוצר בהצלחה.',
+    saveGameFailed: 'שמירת המשחק נכשלה.',
+    gameDeletedSuccess: 'המשחק נמחק.',
+    deleteGameFailed: 'מחיקת משחק נכשלה.',
+    playerAddedSuccess: 'השחקן נוסף לרשימת הפעילים.',
+    addPlayerFailed: 'הוספת שחקן נכשלה.',
+    pendingApprovalsTitle: 'אישורים בהמתנה',
+    approveButton: 'אשר',
+    rejectButton: 'דחה',
+    blockButton: 'חסום',
+    noPendingUsers: 'אין משתמשים בהמתנה לאישור.',
+    noActivePlayersYet: 'אין שחקנים פעילים עדיין.',
+    playerApprovedSuccess: 'השחקן אושר בהצלחה.',
+    playerRejectedSuccess: 'השחקן נדחה.',
+    playerBlockedSuccess: 'השחקן חוסם.',
+    approvePlayerFailed: 'אישור השחקן נכשל.',
+    rejectPlayerFailed: 'דחיית השחקן נכשלה.',
+    blockPlayerFailed: 'חסימת השחקן נכשלה.',
+    lotteryDisabledRule: 'כאשר ההגרלה כבויה, אין הגרלה לעודפים.',
+    upcomingGame: 'משחק קרוב',
+    noUpcomingLotteryGame: 'אין כרגע משחק קרוב להצגת הגרלה.',
+    lotteryRuleNoY: 'אם Y לא מסומן ומספר השחקנים גדול מ־X, תיערך הגרלה עם רוטציה שווה בין כל הנרשמים.',
+    lotteryRuleWithY: 'אם Y מסומן, ההגרלה תיערך כשמספר השחקנים גדול מ־X וקטן מ־Y, או גדול מ־Y.',
+  },
+  fr: {
+    language: 'Langue',
+    initialSetup: 'Configuration initiale',
+    chooseLanguage: 'Choisir la langue',
+    registerAs: 'Inscription en tant que',
+    admin: 'Admin',
+    player: 'Joueur',
+    username: 'Nom d utilisateur',
+    password: 'Mot de passe',
+    passwordConfirm: 'Confirmer le mot de passe',
+    finishSetup: 'Terminer',
+    passwordMismatch: 'Les mots de passe ne correspondent pas.',
+    passwordShort: 'Le mot de passe doit contenir au moins 4 caracteres.',
+    profileSelectTitle: 'Connexion via la liste des joueurs actifs',
+    selectPlayer: 'Choisir un joueur',
+    playerPasswordPlaceholder: 'Mot de passe (si defini)',
+    playerLogin: 'Se connecter',
+    adminLoginTitle: 'Connexion admin',
+    adminUsernamePlaceholder: 'Identifiant admin',
+    adminPasswordPlaceholder: 'Mot de passe admin',
+    adminLoginButton: 'Connexion admin',
+    mainTab: 'Matchs et inscription',
+    rulesTab: 'Regles d inscription',
+    lotteryTab: 'Rotation du tirage',
+    adminLogout: 'Quitter admin',
+    signedInSession: 'Session active',
+    signOut: 'Se deconnecter',
+    rulesSummaryPrefix: 'Regles',
+    rulesActiveGroup: 'Groupe actif',
+    rulesActiveGameType: 'Type de match actif',
+    rulesMinPlayers: 'Minimum de joueurs',
+    rulesMaxX: 'Maximum X',
+    rulesMaxY: 'Maximum Y',
+    disabled: 'Desactive',
+    yesLabel: 'Oui',
+    noLabel: 'Non',
+    statusLabel: 'Statut',
+    playingLabel: 'Joue',
+    notPlayingLabel: 'Ne joue pas',
+    onBenchThisRound: 'Sur le banc ce tour',
+    registeredCount: 'Inscrits',
+    locationTbd: 'Lieu a confirmer',
+    registrationLock: 'Cloture des inscriptions',
+    registrationClosedMessagePrefix: 'Les inscriptions sont fermees. La cloture se fait la veille a',
+    registrationClosedShort: 'Inscriptions fermees',
+    joinGame: 'Rejoindre le match',
+    cancelRegistration: 'Annuler inscription',
+    noPlannedGame: 'Aucun match prevu pour le moment. Admin peut en creer un.',
+    upcomingGameTitle: 'Match a venir',
+    nextGameTitle: 'Match suivant',
+    addToCalendar: 'Ajouter au calendrier',
+    activePlayersManagement: 'Gestion des joueurs actifs',
+    newPlayerNamePlaceholder: 'Nom du nouveau joueur',
+    addPlayer: 'Ajouter joueur',
+    activeLabel: 'actif',
+    inactiveLabel: 'inactif',
+    setPasswordPlaceholder: 'Definir mot de passe',
+    savePassword: 'Enregistrer mot de passe',
+    deleteAction: 'Supprimer',
+    editGameTitle: 'Modifier match',
+    createGameAdminOnlyTitle: 'Creer un nouveau match (admin seulement)',
+    editPrefix: 'Modifier',
+    deletePrefix: 'Supprimer',
+    gameTitlePlaceholder: 'Titre du match',
+    locationPlaceholder: 'Lieu',
+    notesPlaceholder: 'Notes',
+    saveChanges: 'Enregistrer changements',
+    createGame: 'Creer match',
+    cancelAction: 'Annuler',
+    registrationsUpcomingGame: 'Inscriptions pour le match a venir',
+    registrationsNextGame: 'Inscriptions pour le match suivant',
+    noRegistrationsYet: 'Pas encore d inscriptions pour ce match.',
+    customRulesTitle: 'Regles personnalisees par groupe et type de match',
+    overflowLotteryLabel: 'Tirage des excedents',
+    noCustomRulesYet: 'Aucune regle personnalisee definie pour ce groupe et type de match.',
+    lotteryWhoOutTitle: 'Qui sort au tirage',
+    benchedLabel: 'Banc',
+    timesLabel: 'fois',
+    benchedCurrentRound: 'Au banc ce tour',
+    playingCurrentRound: 'Joue ce tour',
+    notRegisteredCurrentGame: 'Non inscrit au match actuel',
+    yourPosition: 'Votre position',
+    adminCredentialsIncorrect: 'Identifiants admin incorrects ou non configures.',
+    playerMarkedInactive: 'Joueur marque inactif.',
+    deletePlayerFailed: 'Echec de suppression du joueur.',
+    playerPasswordUpdated: 'Mot de passe joueur mis a jour.',
+    passwordUpdateFailed: 'Echec de mise a jour du mot de passe.',
+    loadDataFailed: 'Echec du chargement des donnees.',
+    adminLoginSuccess: 'Connexion admin reussie.',
+    choosePlayerRequired: 'Veuillez choisir un joueur dans la liste.',
+    selectedPlayerNotFound: 'Joueur selectionne introuvable.',
+    playerLoginConfirmMessage: 'Apres connexion, inscrivez-vous au match a venir.',
+    playerLoginSuccess: 'Connexion terminee. Inscrivez-vous au match a venir.',
+    playerLoginFailed: 'Connexion echouee.',
+    joinGameSuccess: 'Inscription au match reussie.',
+    joinGameFailed: 'Impossible de rejoindre pour le moment.',
+    leaveGameSuccess: 'Inscription annulee.',
+    leaveGameFailed: 'Impossible de retirer l inscription pour le moment.',
+    adminOnlyCreateGame: 'Seul l admin peut creer de nouveaux matchs.',
+    gameUpdatedSuccess: 'Match mis a jour avec succes.',
+    gameCreatedSuccess: 'Match cree avec succes.',
+    saveGameFailed: 'Echec de sauvegarde du match.',
+    gameDeletedSuccess: 'Match supprime.',
+    deleteGameFailed: 'Echec de suppression du match.',
+    playerAddedSuccess: 'Joueur ajoute a la liste active.',
+    addPlayerFailed: 'Echec d ajout du joueur.',
+    pendingApprovalsTitle: 'Approbations en attente',
+    approveButton: 'Approuver',
+    rejectButton: 'Rejeter',
+    blockButton: 'Bloquer',
+    noPendingUsers: 'Aucun utilisateur en attente d approbation.',
+    playerApprovedSuccess: 'Joueur approuve avec succes.',
+    playerRejectedSuccess: 'Joueur rejete.',
+    playerBlockedSuccess: 'Joueur bloque.',
+    approvePlayerFailed: 'Echec de l approbation du joueur.',
+    rejectPlayerFailed: 'Echec du rejet du joueur.',
+    blockPlayerFailed: 'Echec du blocage du joueur.',
+    lotteryDisabledRule: 'Si le tirage est desactive, aucun tirage d excedent ne s applique.',
+    upcomingGame: 'Match a venir',
+    noUpcomingLotteryGame: 'Aucun match a venir pour afficher le tirage.',
+    lotteryRuleNoY: 'Si Y est desactive et joueurs > X, tirage sur tous les inscrits avec rotation egale.',
+    lotteryRuleWithY: 'Si Y est active, tirage quand joueurs > X et < Y, ou quand joueurs > Y.',
+  },
+  de: {
+    language: 'Sprache',
+    initialSetup: 'Ersteinrichtung',
+    chooseLanguage: 'Sprache wahlen',
+    registerAs: 'Registrieren als',
+    admin: 'Admin',
+    player: 'Spieler',
+    username: 'Benutzername',
+    password: 'Passwort',
+    passwordConfirm: 'Passwort bestatigen',
+    finishSetup: 'Einrichtung abschliessen',
+    passwordMismatch: 'Passworter stimmen nicht uberein.',
+    passwordShort: 'Das Passwort muss mindestens 4 Zeichen haben.',
+    profileSelectTitle: 'Anmeldung uber aktive Spielerliste',
+    selectPlayer: 'Spieler wahlen',
+    playerPasswordPlaceholder: 'Passwort (falls gesetzt)',
+    playerLogin: 'Anmelden',
+    adminLoginTitle: 'Admin Anmeldung',
+    adminUsernamePlaceholder: 'Admin Benutzername',
+    adminPasswordPlaceholder: 'Admin Passwort',
+    adminLoginButton: 'Als Admin anmelden',
+    mainTab: 'Spiele und Anmeldung',
+    rulesTab: 'Wie die Anmeldung funktioniert',
+    lotteryTab: 'Losrotation',
+    adminLogout: 'Admin verlassen',
+    signedInSession: 'Aktive Sitzung',
+    signOut: 'Abmelden',
+    rulesSummaryPrefix: 'Regeln',
+    rulesActiveGroup: 'Aktive Gruppe',
+    rulesActiveGameType: 'Aktiver Spieltyp',
+    rulesMinPlayers: 'Mindestspieler',
+    rulesMaxX: 'Maximum X',
+    rulesMaxY: 'Maximum Y',
+    disabled: 'Deaktiviert',
+    yesLabel: 'Ja',
+    noLabel: 'Nein',
+    statusLabel: 'Status',
+    playingLabel: 'Spielt',
+    notPlayingLabel: 'Spielt nicht',
+    onBenchThisRound: 'Diese Runde auf der Bank',
+    registeredCount: 'Registriert',
+    locationTbd: 'Ort wird aktualisiert',
+    registrationLock: 'Anmeldeschluss',
+    registrationClosedMessagePrefix: 'Anmeldung geschlossen. Die Sperre erfolgt am Vortag um',
+    registrationClosedShort: 'Anmeldung geschlossen',
+    joinGame: 'Zum Spiel anmelden',
+    cancelRegistration: 'Anmeldung stornieren',
+    noPlannedGame: 'Derzeit ist kein Spiel geplant. Admin kann ein neues Spiel erstellen.',
+    upcomingGameTitle: 'Kommendes Spiel',
+    nextGameTitle: 'Naechstes Spiel',
+    addToCalendar: 'Zum Kalender hinzufugen',
+    activePlayersManagement: 'Verwaltung aktiver Spieler',
+    newPlayerNamePlaceholder: 'Name des neuen Spielers',
+    addPlayer: 'Spieler hinzufugen',
+    activeLabel: 'aktiv',
+    inactiveLabel: 'inaktiv',
+    setPasswordPlaceholder: 'Passwort setzen',
+    savePassword: 'Passwort speichern',
+    deleteAction: 'Loeschen',
+    editGameTitle: 'Spiel bearbeiten',
+    createGameAdminOnlyTitle: 'Neues Spiel erstellen (nur Admin)',
+    editPrefix: 'Bearbeiten',
+    deletePrefix: 'Loeschen',
+    gameTitlePlaceholder: 'Spieltitel',
+    locationPlaceholder: 'Ort',
+    notesPlaceholder: 'Notizen',
+    saveChanges: 'Aenderungen speichern',
+    createGame: 'Spiel erstellen',
+    cancelAction: 'Abbrechen',
+    registrationsUpcomingGame: 'Anmeldungen fuer kommendes Spiel',
+    registrationsNextGame: 'Anmeldungen fuer naechstes Spiel',
+    noRegistrationsYet: 'Noch keine Anmeldungen fuer dieses Spiel.',
+    customRulesTitle: 'Angepasste Regeln nach Gruppe und Spieltyp',
+    overflowLotteryLabel: 'Ueberlauf-Losung',
+    noCustomRulesYet: 'Noch keine angepassten Regeln fuer diese Gruppe und diesen Spieltyp.',
+    lotteryWhoOutTitle: 'Wer in der Losrunde raus ist',
+    benchedLabel: 'Bank',
+    timesLabel: 'mal',
+    benchedCurrentRound: 'In aktueller Runde auf der Bank',
+    playingCurrentRound: 'Spielt in aktueller Runde',
+    notRegisteredCurrentGame: 'Nicht fuer aktuelles Spiel registriert',
+    yourPosition: 'Deine Position',
+    adminCredentialsIncorrect: 'Admin-Anmeldedaten sind falsch oder nicht konfiguriert.',
+    playerMarkedInactive: 'Spieler als inaktiv markiert.',
+    deletePlayerFailed: 'Loeschen des Spielers fehlgeschlagen.',
+    playerPasswordUpdated: 'Spielerpasswort aktualisiert.',
+    passwordUpdateFailed: 'Passwortaktualisierung fehlgeschlagen.',
+    loadDataFailed: 'Daten konnten nicht geladen werden.',
+    adminLoginSuccess: 'Admin-Anmeldung erfolgreich.',
+    choosePlayerRequired: 'Bitte waehle einen Spieler aus der Liste.',
+    selectedPlayerNotFound: 'Ausgewaehlter Spieler wurde nicht gefunden.',
+    playerLoginConfirmMessage: 'Nach dem Login bitte fuer das kommende Spiel anmelden.',
+    playerLoginSuccess: 'Login abgeschlossen. Bitte fuer das kommende Spiel anmelden.',
+    playerLoginFailed: 'Anmeldung fehlgeschlagen.',
+    joinGameSuccess: 'Erfolgreich fuer das Spiel angemeldet.',
+    joinGameFailed: 'Beitritt ist derzeit nicht moeglich.',
+    leaveGameSuccess: 'Anmeldung wurde storniert.',
+    leaveGameFailed: 'Abmeldung ist derzeit nicht moeglich.',
+    adminOnlyCreateGame: 'Nur Admin kann neue Spiele erstellen.',
+    gameUpdatedSuccess: 'Spiel erfolgreich aktualisiert.',
+    gameCreatedSuccess: 'Spiel erfolgreich erstellt.',
+    saveGameFailed: 'Spiel konnte nicht gespeichert werden.',
+    gameDeletedSuccess: 'Spiel geloescht.',
+    deleteGameFailed: 'Spiel konnte nicht geloescht werden.',
+    playerAddedSuccess: 'Spieler zur aktiven Liste hinzugefuegt.',
+    addPlayerFailed: 'Spieler konnte nicht hinzugefuegt werden.',
+    pendingApprovalsTitle: 'Ausstehende Genehmigungen',
+    approveButton: 'Genehmigen',
+    rejectButton: 'Ablehnen',
+    blockButton: 'Sperren',
+    noPendingUsers: 'Keine Benutzer warten auf Genehmigung.',
+    playerApprovedSuccess: 'Spieler erfolgreich genehmigt.',
+    playerRejectedSuccess: 'Spieler abgelehnt.',
+    playerBlockedSuccess: 'Spieler gesperrt.',
+    approvePlayerFailed: 'Spieler konnte nicht genehmigt werden.',
+    rejectPlayerFailed: 'Spieler konnte nicht abgelehnt werden.',
+    blockPlayerFailed: 'Spieler konnte nicht gesperrt werden.',
+    lotteryDisabledRule: 'Wenn Losung deaktiviert ist, wird kein Ueberlauf gelost.',
+    upcomingGame: 'Kommendes Spiel',
+    noUpcomingLotteryGame: 'Kein kommendes Spiel fuer Losanzeige.',
+    lotteryRuleNoY: 'Wenn Y deaktiviert und Spieler > X, Losung ueber alle Registrierten mit gleicher Rotation.',
+    lotteryRuleWithY: 'Wenn Y aktiviert, Losung bei Spieler > X und < Y oder bei Spieler > Y.',
+  },
+  es: {
+    language: 'Idioma',
+    initialSetup: 'Configuracion inicial',
+    chooseLanguage: 'Elegir idioma',
+    registerAs: 'Registrar como',
+    admin: 'Admin',
+    player: 'Jugador',
+    username: 'Nombre de usuario',
+    password: 'Contrasena',
+    passwordConfirm: 'Confirmar contrasena',
+    finishSetup: 'Finalizar configuracion',
+    passwordMismatch: 'Las contrasenas no coinciden.',
+    passwordShort: 'La contrasena debe tener al menos 4 caracteres.',
+    profileSelectTitle: 'Ingreso por lista de jugadores activos',
+    selectPlayer: 'Seleccionar jugador',
+    playerPasswordPlaceholder: 'Contrasena (si existe)',
+    playerLogin: 'Entrar',
+    adminLoginTitle: 'Ingreso de admin',
+    adminUsernamePlaceholder: 'Usuario admin',
+    adminPasswordPlaceholder: 'Contrasena admin',
+    adminLoginButton: 'Ingresar como admin',
+    mainTab: 'Partidos y registro',
+    rulesTab: 'Como funciona el registro',
+    lotteryTab: 'Rotacion de sorteo',
+    adminLogout: 'Salir de admin',
+    signedInSession: 'Sesion activa',
+    signOut: 'Cerrar sesion',
+    rulesSummaryPrefix: 'Reglas',
+    rulesActiveGroup: 'Grupo activo',
+    rulesActiveGameType: 'Tipo de juego activo',
+    rulesMinPlayers: 'Jugadores minimos',
+    rulesMaxX: 'Maximo X',
+    rulesMaxY: 'Maximo Y',
+    disabled: 'Desactivado',
+    yesLabel: 'Si',
+    noLabel: 'No',
+    statusLabel: 'Estado',
+    playingLabel: 'Jugando',
+    notPlayingLabel: 'No juega',
+    onBenchThisRound: 'En banco esta ronda',
+    registeredCount: 'Registrados',
+    locationTbd: 'Ubicacion por confirmar',
+    registrationLock: 'Cierre de registro',
+    registrationClosedMessagePrefix: 'El registro esta cerrado. El cierre ocurre un dia antes a las',
+    registrationClosedShort: 'Registro cerrado',
+    joinGame: 'Unirse al partido',
+    cancelRegistration: 'Cancelar registro',
+    noPlannedGame: 'No hay partido planificado. Admin puede crear uno nuevo.',
+    upcomingGameTitle: 'Partido proximo',
+    nextGameTitle: 'Siguiente partido',
+    addToCalendar: 'Agregar al calendario',
+    activePlayersManagement: 'Gestion de jugadores activos',
+    newPlayerNamePlaceholder: 'Nombre del nuevo jugador',
+    addPlayer: 'Agregar jugador',
+    activeLabel: 'activo',
+    inactiveLabel: 'inactivo',
+    setPasswordPlaceholder: 'Definir contrasena',
+    savePassword: 'Guardar contrasena',
+    deleteAction: 'Eliminar',
+    editGameTitle: 'Editar partido',
+    createGameAdminOnlyTitle: 'Crear partido nuevo (solo admin)',
+    editPrefix: 'Editar',
+    deletePrefix: 'Eliminar',
+    gameTitlePlaceholder: 'Titulo del partido',
+    locationPlaceholder: 'Ubicacion',
+    notesPlaceholder: 'Notas',
+    saveChanges: 'Guardar cambios',
+    createGame: 'Crear partido',
+    cancelAction: 'Cancelar',
+    registrationsUpcomingGame: 'Registros para el partido proximo',
+    registrationsNextGame: 'Registros para el siguiente partido',
+    noRegistrationsYet: 'Todavia no hay registros para este partido.',
+    customRulesTitle: 'Reglas personalizadas por grupo y tipo de juego',
+    overflowLotteryLabel: 'Sorteo de excedentes',
+    noCustomRulesYet: 'Aun no hay reglas personalizadas para este grupo y tipo de juego.',
+    lotteryWhoOutTitle: 'Quien quedo fuera en el sorteo',
+    benchedLabel: 'En banco',
+    timesLabel: 'veces',
+    benchedCurrentRound: 'Fuera en ronda actual',
+    playingCurrentRound: 'Jugando en ronda actual',
+    notRegisteredCurrentGame: 'No registrado para el partido actual',
+    yourPosition: 'Tu posicion',
+    adminCredentialsIncorrect: 'Credenciales de admin incorrectas o no configuradas.',
+    playerMarkedInactive: 'Jugador marcado como inactivo.',
+    deletePlayerFailed: 'No se pudo eliminar al jugador.',
+    playerPasswordUpdated: 'Contrasena del jugador actualizada.',
+    passwordUpdateFailed: 'Error al actualizar contrasena.',
+    loadDataFailed: 'No se pudieron cargar los datos.',
+    adminLoginSuccess: 'Ingreso de admin exitoso.',
+    choosePlayerRequired: 'Debes seleccionar un jugador de la lista.',
+    selectedPlayerNotFound: 'No se encontro el jugador seleccionado.',
+    playerLoginConfirmMessage: 'Despues de entrar a la app, registrate al partido proximo.',
+    playerLoginSuccess: 'Ingreso completado. Registrate al partido proximo.',
+    playerLoginFailed: 'Error de ingreso.',
+    joinGameSuccess: 'Te registraste al partido con exito.',
+    joinGameFailed: 'No se puede unir en este momento.',
+    leaveGameSuccess: 'Registro cancelado.',
+    leaveGameFailed: 'No se puede quitar el registro ahora.',
+    adminOnlyCreateGame: 'Solo admin puede crear partidos nuevos.',
+    gameUpdatedSuccess: 'Partido actualizado con exito.',
+    gameCreatedSuccess: 'Partido creado con exito.',
+    saveGameFailed: 'No se pudo guardar el partido.',
+    gameDeletedSuccess: 'Partido eliminado.',
+    deleteGameFailed: 'No se pudo eliminar el partido.',
+    playerAddedSuccess: 'Jugador agregado a la lista activa.',
+    addPlayerFailed: 'No se pudo agregar el jugador.',
+    pendingApprovalsTitle: 'Aprobaciones pendientes',
+    approveButton: 'Aprobar',
+    rejectButton: 'Rechazar',
+    blockButton: 'Bloquear',
+    noPendingUsers: 'No hay usuarios pendientes de aprobacion.',
+    playerApprovedSuccess: 'Jugador aprobado exitosamente.',
+    playerRejectedSuccess: 'Jugador rechazado.',
+    playerBlockedSuccess: 'Jugador bloqueado.',
+    approvePlayerFailed: 'No se pudo aprobar al jugador.',
+    rejectPlayerFailed: 'No se pudo rechazar al jugador.',
+    blockPlayerFailed: 'No se pudo bloquear al jugador.',
+    lotteryDisabledRule: 'Si el sorteo esta desactivado, no se aplica sorteo de excedentes.',
+    upcomingGame: 'Partido proximo',
+    noUpcomingLotteryGame: 'No hay partido proximo para mostrar sorteo.',
+    lotteryRuleNoY: 'Si Y esta desactivado y jugadores > X, sorteo entre todos los registrados con rotacion igual.',
+    lotteryRuleWithY: 'Si Y esta activado, sorteo cuando jugadores > X y < Y, o cuando jugadores > Y.',
+  },
+  ru: {
+    language: 'Yazyk',
+    initialSetup: 'Pervonachalnaya nastroika',
+    chooseLanguage: 'Vyberite yazyk',
+    registerAs: 'Registraciya kak',
+    admin: 'Admin',
+    player: 'Igrok',
+    username: 'Imya polzovatelya',
+    password: 'Parol',
+    passwordConfirm: 'Povtorite parol',
+    finishSetup: 'Zavershit nastroiku',
+    passwordMismatch: 'Paroli ne sovpadayut.',
+    passwordShort: 'Parol dolzhen byt minimum 4 simvola.',
+    profileSelectTitle: 'Vhod po spisku aktivnyh igrokov',
+    selectPlayer: 'Vyberite igroka',
+    playerPasswordPlaceholder: 'Parol (esli ustanovlen)',
+    playerLogin: 'Voiti',
+    adminLoginTitle: 'Vhod admina',
+    adminUsernamePlaceholder: 'Imya admina',
+    adminPasswordPlaceholder: 'Parol admina',
+    adminLoginButton: 'Voiti kak admin',
+    mainTab: 'Igry i registraciya',
+    rulesTab: 'Kak rabotaet registraciya',
+    lotteryTab: 'Rotaciya loterei',
+    adminLogout: 'Vyiti iz admin',
+    signedInSession: 'Aktivnaya sessiya',
+    signOut: 'Vyiti',
+    rulesSummaryPrefix: 'Pravila',
+    rulesActiveGroup: 'Aktivnaya gruppa',
+    rulesActiveGameType: 'Aktivny tip igry',
+    rulesMinPlayers: 'Minimum igrokov',
+    rulesMaxX: 'Maksimum X',
+    rulesMaxY: 'Maksimum Y',
+    disabled: 'Otklyucheno',
+    yesLabel: 'Da',
+    noLabel: 'Net',
+    statusLabel: 'Status',
+    playingLabel: 'Igraet',
+    notPlayingLabel: 'Ne igraet',
+    onBenchThisRound: 'Na skameike v etom raunde',
+    registeredCount: 'Zaregistrirovano',
+    locationTbd: 'Mesto budet utochneno',
+    registrationLock: 'Zakrytie registracii',
+    registrationClosedMessagePrefix: 'Registraciya zakryta. Blokirovka za den do igry v',
+    registrationClosedShort: 'Registraciya zakryta',
+    joinGame: 'Zapisatsya na igru',
+    cancelRegistration: 'Otmenit registraciyu',
+    noPlannedGame: 'Seychas net zaplanirovannoi igry. Admin mozhet sozdat novuyu.',
+    upcomingGameTitle: 'Blizhayshaya igra',
+    nextGameTitle: 'Sleduyushchaya igra',
+    addToCalendar: 'Dobavit v kalendar',
+    activePlayersManagement: 'Upravlenie aktivnymi igrokami',
+    newPlayerNamePlaceholder: 'Imya novogo igroka',
+    addPlayer: 'Dobavit igroka',
+    activeLabel: 'aktivnyi',
+    inactiveLabel: 'neaktivnyi',
+    setPasswordPlaceholder: 'Zadat parol',
+    savePassword: 'Sohranit parol',
+    deleteAction: 'Udalit',
+    editGameTitle: 'Redaktirovat igru',
+    createGameAdminOnlyTitle: 'Sozdat novuyu igru (tolko admin)',
+    editPrefix: 'Redaktirovat',
+    deletePrefix: 'Udalit',
+    gameTitlePlaceholder: 'Nazvanie igry',
+    locationPlaceholder: 'Mesto',
+    notesPlaceholder: 'Zametki',
+    saveChanges: 'Sohranit izmeneniya',
+    createGame: 'Sozdat igru',
+    cancelAction: 'Otmena',
+    registrationsUpcomingGame: 'Registraciya na blizhayshuyu igru',
+    registrationsNextGame: 'Registraciya na sleduyushchuyu igru',
+    noRegistrationsYet: 'Poka net registracii na etu igru.',
+    customRulesTitle: 'Nastroennye pravila po gruppe i tipu igry',
+    overflowLotteryLabel: 'Zherebyevka dlya lishnih',
+    noCustomRulesYet: 'Eshche net nastroennyh pravil dlya etoi gruppy i tipa igry.',
+    lotteryWhoOutTitle: 'Kto vybyl v zherebyevke',
+    benchedLabel: 'Na skameike',
+    timesLabel: 'raz',
+    benchedCurrentRound: 'Na skameike v tekushchem raunde',
+    playingCurrentRound: 'Igraet v tekushchem raunde',
+    notRegisteredCurrentGame: 'Ne zaregistrirovan na tekushchuyu igru',
+    yourPosition: 'Vasha poziciya',
+    adminCredentialsIncorrect: 'Dannye admin neverny ili ne nastroeny.',
+    playerMarkedInactive: 'Igrok pometchen kak neaktivny.',
+    deletePlayerFailed: 'Ne udalos udalit igroka.',
+    playerPasswordUpdated: 'Parol igroka obnovlen.',
+    passwordUpdateFailed: 'Ne udalos obnovit parol.',
+    loadDataFailed: 'Ne udalos zagruzit dannye.',
+    adminLoginSuccess: 'Vhod admina uspeshen.',
+    choosePlayerRequired: 'Vyberite igroka iz spiska.',
+    selectedPlayerNotFound: 'Vybrannyi igrok ne naiden.',
+    playerLoginConfirmMessage: 'Posle vhoda zaregistriruites na blizhayshuyu igru.',
+    playerLoginSuccess: 'Vhod vypolnen. Zaregistriruites na blizhayshuyu igru.',
+    playerLoginFailed: 'Vhod ne udalsya.',
+    joinGameSuccess: 'Vy uspeshno zaregistrirovalis na igru.',
+    joinGameFailed: 'Nevozmozhno prisoyedinitsya seichas.',
+    leaveGameSuccess: 'Registraciya otmenena.',
+    leaveGameFailed: 'Nevozmozhno ubrat registraciyu seichas.',
+    adminOnlyCreateGame: 'Tolko admin mozhet sozdavat novye igry.',
+    gameUpdatedSuccess: 'Igra uspeshno obnovlena.',
+    gameCreatedSuccess: 'Igra uspeshno sozdana.',
+    saveGameFailed: 'Ne udalos sohranit igru.',
+    gameDeletedSuccess: 'Igra udalena.',
+    deleteGameFailed: 'Ne udalos udalit igru.',
+    playerAddedSuccess: 'Igrok dobavlen v aktivnyi spisok.',
+    addPlayerFailed: 'Ne udalos dobavit igroka.',
+    pendingApprovalsTitle: 'Ozhidayushchie utverzhdeniya',
+    approveButton: 'Odobriti',
+    rejectButton: 'Otkloniti',
+    blockButton: 'Zablokirovati',
+    noPendingUsers: 'Net polzovateley, ozhidayushchikh utverzhdeniya.',
+    playerApprovedSuccess: 'Igrok uspeshno odobren.',
+    playerRejectedSuccess: 'Igrok otklonen.',
+    playerBlockedSuccess: 'Igrok zablokirovan.',
+    approvePlayerFailed: 'Ne udalos odobrit igroka.',
+    rejectPlayerFailed: 'Ne udalos otkloniti igroka.',
+    blockPlayerFailed: 'Ne udalos zablokirovati igroka.',
+    lotteryDisabledRule: 'Esli zherebyevka otklyuchena, lishnie ne razygyrivayutsya.',
+    upcomingGame: 'Blizhayshaya igra',
+    noUpcomingLotteryGame: 'Net blizhayshei igry dlya pokazha zherebyevki.',
+    lotteryRuleNoY: 'Esli Y otklyuchen i igrokov > X, zherebyevka sredi vseh registrirovannyh s ravnoi rotaciei.',
+    lotteryRuleWithY: 'Esli Y vklyuchen, zherebyevka pri igrokah > X i < Y ili pri igrokah > Y.',
+  },
+  uk: {
+    language: 'Mova',
+    initialSetup: 'Pochatkove nalashtuvannya',
+    chooseLanguage: 'Obraty movu',
+    registerAs: 'Zareiestruvatys yak',
+    admin: 'Admin',
+    player: 'Gravec',
+    username: 'Im ya korystuvacha',
+    password: 'Parol',
+    passwordConfirm: 'Pidtverdzhennia parolya',
+    finishSetup: 'Zavershyty nalashtuvannya',
+    passwordMismatch: 'Paroli ne zbigayutsya.',
+    passwordShort: 'Parol maye mistyty shchonaymenshe 4 symvoly.',
+    profileSelectTitle: 'Vkhid za spyskom aktyvnyh gravciv',
+    selectPlayer: 'Vybraty gravcya',
+    playerPasswordPlaceholder: 'Parol (yakshcho ye)',
+    playerLogin: 'Uviyty',
+    adminLoginTitle: 'Vkhid admina',
+    adminUsernamePlaceholder: 'Login admina',
+    adminPasswordPlaceholder: 'Parol admina',
+    adminLoginButton: 'Uviyty yak admin',
+    mainTab: 'Igry ta reiestraciya',
+    rulesTab: 'Yak pracyuie reiestraciya',
+    lotteryTab: 'Rotaciya zherebkuvannya',
+    adminLogout: 'Vyity z admin',
+    signedInSession: 'Aktyvna sesiia',
+    signOut: 'Vyity',
+    rulesSummaryPrefix: 'Pravyla',
+    rulesActiveGroup: 'Aktyvna hrupa',
+    rulesActiveGameType: 'Aktyvnyi typ hry',
+    rulesMinPlayers: 'Minimum hravciv',
+    rulesMaxX: 'Maksimum X',
+    rulesMaxY: 'Maksimum Y',
+    disabled: 'Vymkneno',
+    yesLabel: 'Tak',
+    noLabel: 'Ni',
+    statusLabel: 'Status',
+    playingLabel: 'Graie',
+    notPlayingLabel: 'Ne graie',
+    onBenchThisRound: 'Na lavi v cii rundi',
+    registeredCount: 'Zareiestrovano',
+    locationTbd: 'Misce utochnyuietsya',
+    registrationLock: 'Zakryttia reiestracii',
+    registrationClosedMessagePrefix: 'Reiestraciyu zakryto. Blokuvannya za den do gry o',
+    registrationClosedShort: 'Reiestraciyu zakryto',
+    joinGame: 'Zareiestruvatys na hru',
+    cancelRegistration: 'Skasuvaty reiestraciyu',
+    noPlannedGame: 'Nemaie zaplanovanoi hry. Admin mozhe stvoryty novu.',
+    upcomingGameTitle: 'Nablyzhcha hra',
+    nextGameTitle: 'Nastupna hra',
+    addToCalendar: 'Dodaty v kalendar',
+    activePlayersManagement: 'Keruvannya aktyvnymy hravcyamy',
+    newPlayerNamePlaceholder: 'Imya novogo hravcya',
+    addPlayer: 'Dodaty hravcya',
+    activeLabel: 'aktyvnyi',
+    inactiveLabel: 'neaktyvnyi',
+    setPasswordPlaceholder: 'Vstanovyty parol',
+    savePassword: 'Zberehty parol',
+    deleteAction: 'Vydalyty',
+    editGameTitle: 'Redahuvaty hru',
+    createGameAdminOnlyTitle: 'Stvoryty novu hru (tilky admin)',
+    editPrefix: 'Redahuvaty',
+    deletePrefix: 'Vydalyty',
+    gameTitlePlaceholder: 'Nazva hry',
+    locationPlaceholder: 'Misce',
+    notesPlaceholder: 'Prym itky',
+    saveChanges: 'Zberehty zminy',
+    createGame: 'Stvoryty hru',
+    cancelAction: 'Skasuvaty',
+    registrationsUpcomingGame: 'Reiestraciya na nablyzhchu hru',
+    registrationsNextGame: 'Reiestraciya na nastupnu hru',
+    noRegistrationsYet: 'Shche nemaie reiestracii na cyu hru.',
+    customRulesTitle: 'Nalashtovani pravyla za hrupoyu ta typom hry',
+    overflowLotteryLabel: 'Zherebkuvannya dlya nadlyshku',
+    noCustomRulesYet: 'Shche nemaie nalashtovanyh pravyl dlya ciyeyi hrupy ta typu hry.',
+    lotteryWhoOutTitle: 'Khto vyishov u zherebkuvanni',
+    benchedLabel: 'Na lavi',
+    timesLabel: 'raziv',
+    benchedCurrentRound: 'Na lavi v potochniy rundi',
+    playingCurrentRound: 'Graie v potochniy rundi',
+    notRegisteredCurrentGame: 'Ne zareiestrovanyi na potochnu hru',
+    yourPosition: 'Vasha pozyciya',
+    adminCredentialsIncorrect: 'Dani admin nevirni abo ne nalashtovani.',
+    playerMarkedInactive: 'Hravcya poznacheno yak neaktyvnogo.',
+    deletePlayerFailed: 'Ne vdaloся vydalyty hravcya.',
+    playerPasswordUpdated: 'Parol hravcya onovleno.',
+    passwordUpdateFailed: 'Ne vdaloся onovyty parol.',
+    loadDataFailed: 'Ne vdaloся zavantazhyty dani.',
+    adminLoginSuccess: 'Vkhid admina uspishnyi.',
+    choosePlayerRequired: 'Obyazkovo vyberit hravcya zi spysku.',
+    selectedPlayerNotFound: 'Vybranogo hravcya ne znaydeno.',
+    playerLoginConfirmMessage: 'Pislya vhodu v zastosunok zareiestruitesya na nablyzhchu hru.',
+    playerLoginSuccess: 'Vkhid zaversheno. Zareiestruitesya na nablyzhchu hru.',
+    playerLoginFailed: 'Vkhid ne vdavsya.',
+    joinGameSuccess: 'Vy uspishno zareiestruvalys na hru.',
+    joinGameFailed: 'Nemozhlyvo pryednatysya zaraz.',
+    leaveGameSuccess: 'Reiestraciyu skasovano.',
+    leaveGameFailed: 'Nemozhlyvo prybraty reiestraciyu zaraz.',
+    adminOnlyCreateGame: 'Lyshe admin mozhe stvoryuvaty novi igry.',
+    gameUpdatedSuccess: 'Hru uspishno onovleno.',
+    gameCreatedSuccess: 'Hru uspishno stvoreno.',
+    saveGameFailed: 'Ne vdaloся zberehty hru.',
+    gameDeletedSuccess: 'Hru vydaleno.',
+    deleteGameFailed: 'Ne vdaloся vydalyty hru.',
+    playerAddedSuccess: 'Hravcya dodano do aktyvnogo spysku.',
+    addPlayerFailed: 'Ne vdaloся dodaty hravcya.',
+    pendingApprovalsTitle: 'Ochikuvani zatverdzhennya',
+    approveButton: 'Zatverdjyty',
+    rejectButton: 'Vidkhylyty',
+    blockButton: 'Zablokvuvaty',
+    noPendingUsers: 'Nema korystuvachiv, yaki chekayut na zatverdzhennya.',
+    playerApprovedSuccess: 'Hravets uspishno zatverdzhen.',
+    playerRejectedSuccess: 'Hravets vidkhylen.',
+    playerBlockedSuccess: 'Hravets zablokovan.',
+    approvePlayerFailed: 'Ne vdaloся zatverdjyty hravcya.',
+    rejectPlayerFailed: 'Ne vdaloся vidkhylyty hravcya.',
+    blockPlayerFailed: 'Ne vdaloся zablokvuvaty hravcya.',
+    lotteryDisabledRule: 'Yakshcho zherebkuvannya vymkneno, dlya nadlyshku ne vykonuyetsya rozigrash.',
+    upcomingGame: 'Nablyzhcha hra',
+    noUpcomingLotteryGame: 'Nemaie nablyzhchoi hry dlya pokazhu zherebkuvannya.',
+    lotteryRuleNoY: 'Yakshcho Y vymkneno ta hravciv > X, zherebkuvannya sered usih zareiestrovanyh z rivnoyu rotaciyeyu.',
+    lotteryRuleWithY: 'Yakshcho Y увimkneno, zherebkuvannya pry hravcyah > X i < Y, abo pry hravcyah > Y.',
+  },
+  hi: {
+    language: 'Bhasha',
+    initialSetup: 'Prarambhik setup',
+    chooseLanguage: 'Bhasha chunen',
+    registerAs: 'Is roop me register karen',
+    admin: 'Admin',
+    player: 'Player',
+    username: 'Username',
+    password: 'Password',
+    passwordConfirm: 'Password dobara likhen',
+    finishSetup: 'Setup poora karen',
+    passwordMismatch: 'Passwords match nahi karte.',
+    passwordShort: 'Password kam se kam 4 characters ka hona chahiye.',
+    profileSelectTitle: 'Active players list se login',
+    selectPlayer: 'Player chunen',
+    playerPasswordPlaceholder: 'Password (agar set hai)',
+    playerLogin: 'Login',
+    adminLoginTitle: 'Admin login',
+    adminUsernamePlaceholder: 'Admin username',
+    adminPasswordPlaceholder: 'Admin password',
+    adminLoginButton: 'Admin ke roop me login',
+    mainTab: 'Games aur registration',
+    rulesTab: 'Registration kaise kaam karta hai',
+    lotteryTab: 'Lottery rotation',
+    adminLogout: 'Admin se bahar niklen',
+    signedInSession: 'Sakriya session',
+    signOut: 'Sign out',
+    rulesSummaryPrefix: 'Rules',
+    rulesActiveGroup: 'Active group',
+    rulesActiveGameType: 'Active game type',
+    rulesMinPlayers: 'Minimum players',
+    rulesMaxX: 'Maximum X',
+    rulesMaxY: 'Maximum Y',
+    disabled: 'Band',
+    yesLabel: 'Haan',
+    noLabel: 'Nahi',
+    statusLabel: 'Status',
+    playingLabel: 'Khel raha hai',
+    notPlayingLabel: 'Khel nahin raha',
+    onBenchThisRound: 'Is round bench par',
+    registeredCount: 'Registered',
+    locationTbd: 'Location baad me update hoga',
+    registrationLock: 'Registration lock',
+    registrationClosedMessagePrefix: 'Registration band hai. Lock game se ek din pehle',
+    registrationClosedShort: 'Registration band',
+    joinGame: 'Game join karen',
+    cancelRegistration: 'Registration cancel karen',
+    noPlannedGame: 'Abhi koi game plan nahin hai. Admin naya game bana sakta hai.',
+    upcomingGameTitle: 'Aane wala game',
+    nextGameTitle: 'Agla game',
+    addToCalendar: 'Calendar me joden',
+    activePlayersManagement: 'Active players management',
+    newPlayerNamePlaceholder: 'Naye player ka naam',
+    addPlayer: 'Player joden',
+    activeLabel: 'active',
+    inactiveLabel: 'inactive',
+    setPasswordPlaceholder: 'Password set karen',
+    savePassword: 'Password save karen',
+    deleteAction: 'Delete',
+    editGameTitle: 'Game edit karen',
+    createGameAdminOnlyTitle: 'Naya game banaye (sirf admin)',
+    editPrefix: 'Edit',
+    deletePrefix: 'Delete',
+    gameTitlePlaceholder: 'Game title',
+    locationPlaceholder: 'Location',
+    notesPlaceholder: 'Notes',
+    saveChanges: 'Changes save karen',
+    createGame: 'Game banaye',
+    cancelAction: 'Cancel',
+    registrationsUpcomingGame: 'Aane wale game ke registrations',
+    registrationsNextGame: 'Agla game registrations',
+    noRegistrationsYet: 'Is game ke liye abhi registrations nahin hain.',
+    customRulesTitle: 'Group aur game type ke hisab se custom rules',
+    overflowLotteryLabel: 'Overflow lottery',
+    noCustomRulesYet: 'Is group aur game type ke liye abhi custom rules nahin hain.',
+    lotteryWhoOutTitle: 'Lottery rounds me kaun bahar gaya',
+    benchedLabel: 'Bench',
+    timesLabel: 'baar',
+    benchedCurrentRound: 'Is round bench par',
+    playingCurrentRound: 'Is round khel raha hai',
+    notRegisteredCurrentGame: 'Current game ke liye registered nahin',
+    yourPosition: 'Aapki position',
+    adminCredentialsIncorrect: 'Admin credentials galat hain ya set nahin hain.',
+    playerMarkedInactive: 'Player ko inactive mark kiya gaya.',
+    deletePlayerFailed: 'Player delete nahin ho paya.',
+    playerPasswordUpdated: 'Player password update ho gaya.',
+    passwordUpdateFailed: 'Password update fail ho gaya.',
+    loadDataFailed: 'Data load nahin ho paya.',
+    adminLoginSuccess: 'Admin login safal hua.',
+    choosePlayerRequired: 'List se player chunna zaruri hai.',
+    selectedPlayerNotFound: 'Chuna gaya player nahin mila.',
+    playerLoginConfirmMessage: 'App me aane ke baad aane wale game ke liye register karein.',
+    playerLoginSuccess: 'Login ho gaya. Kripya aane wale game ke liye register karein.',
+    playerLoginFailed: 'Login fail ho gaya.',
+    joinGameSuccess: 'Aap game me safalta se register ho gaye.',
+    joinGameFailed: 'Abhi join nahin kar sakte.',
+    leaveGameSuccess: 'Registration cancel ho gayi.',
+    leaveGameFailed: 'Abhi registration hata nahin sakte.',
+    adminOnlyCreateGame: 'Naye game sirf admin bana sakta hai.',
+    gameUpdatedSuccess: 'Game safalta se update hua.',
+    gameCreatedSuccess: 'Game safalta se bana.',
+    saveGameFailed: 'Game save nahin hua.',
+    gameDeletedSuccess: 'Game delete ho gaya.',
+    deleteGameFailed: 'Game delete nahin hua.',
+    playerAddedSuccess: 'Player active list me add ho gaya.',
+    addPlayerFailed: 'Player add nahin ho paya.',
+    pendingApprovalsTitle: 'Manjar hone wali swikriti',
+    approveButton: 'Swikar karen',
+    rejectButton: 'Atkaro',
+    blockButton: 'Band karen',
+    noPendingUsers: 'Koi bhi user swikriti ke liye manjar nahin hai.',
+    playerApprovedSuccess: 'Player safalta se swikar ho gaya.',
+    playerRejectedSuccess: 'Player atkaar diya gaya.',
+    playerBlockedSuccess: 'Player band kar diya gaya.',
+    approvePlayerFailed: 'Player ko swikar karne me nakam.',
+    rejectPlayerFailed: 'Player ko atkarne me nakam.',
+    blockPlayerFailed: 'Player ko band karne me nakam.',
+    lotteryDisabledRule: 'Lottery band hone par overflow lottery apply nahin hoti.',
+    upcomingGame: 'Aane wala game',
+    noUpcomingLotteryGame: 'Lottery dikhane ke liye koi aane wala game nahin hai.',
+    lotteryRuleNoY: 'Agar Y band hai aur players > X, to sab registered players me equal rotation lottery chalegi.',
+    lotteryRuleWithY: 'Agar Y on hai, to lottery players > X aur < Y par, ya players > Y par chalegi.',
+  },
+  zh: {
+    language: 'Language',
+    initialSetup: 'Initial setup',
+    chooseLanguage: 'Choose language',
+    registerAs: 'Register as',
+    admin: 'Admin',
+    player: 'Player',
+    username: 'Username',
+    password: 'Password',
+    passwordConfirm: 'Confirm password',
+    finishSetup: 'Finish setup',
+    passwordMismatch: 'Passwords do not match.',
+    passwordShort: 'Password must be at least 4 characters.',
+    profileSelectTitle: 'Sign in by active players list',
+    selectPlayer: 'Select player',
+    playerPasswordPlaceholder: 'Password (if set)',
+    playerLogin: 'Enter',
+    adminLoginTitle: 'Admin sign in',
+    adminUsernamePlaceholder: 'Admin username',
+    adminPasswordPlaceholder: 'Admin password',
+    adminLoginButton: 'Sign in as admin',
+    mainTab: 'Games and registration',
+    rulesTab: 'How registration works',
+    lotteryTab: 'Lottery rotation',
+    adminLogout: 'Exit admin',
+    signedInSession: 'Active session',
+    signOut: 'Sign out',
+    rulesSummaryPrefix: 'Rules',
+    rulesActiveGroup: 'Active group',
+    rulesActiveGameType: 'Active game type',
+    rulesMinPlayers: 'Minimum players',
+    rulesMaxX: 'Maximum X',
+    rulesMaxY: 'Maximum Y',
+    disabled: 'Disabled',
+    yesLabel: 'Yes',
+    noLabel: 'No',
+    statusLabel: 'Status',
+    playingLabel: 'Playing',
+    notPlayingLabel: 'Not playing',
+    onBenchThisRound: 'On bench this round',
+    registeredCount: 'Registered',
+    locationTbd: 'Location to be confirmed',
+    registrationLock: 'Registration lock',
+    registrationClosedMessagePrefix: 'Registration is closed. Lock happens one day before the game at',
+    registrationClosedShort: 'Registration closed',
+    joinGame: 'Join game',
+    cancelRegistration: 'Cancel registration',
+    noPlannedGame: 'No game is currently planned. Admin can create a new game.',
+    upcomingGameTitle: 'Upcoming game',
+    nextGameTitle: 'Next game',
+    addToCalendar: 'Add to calendar',
+    activePlayersManagement: 'Active players management',
+    newPlayerNamePlaceholder: 'New player name',
+    addPlayer: 'Add player',
+    activeLabel: 'active',
+    inactiveLabel: 'inactive',
+    setPasswordPlaceholder: 'Set password',
+    savePassword: 'Save password',
+    deleteAction: 'Delete',
+    editGameTitle: 'Edit game',
+    createGameAdminOnlyTitle: 'Create new game (admin only)',
+    editPrefix: 'Edit',
+    deletePrefix: 'Delete',
+    gameTitlePlaceholder: 'Game title',
+    locationPlaceholder: 'Location',
+    notesPlaceholder: 'Notes',
+    saveChanges: 'Save changes',
+    createGame: 'Create game',
+    cancelAction: 'Cancel',
+    registrationsUpcomingGame: 'Registrations for upcoming game',
+    registrationsNextGame: 'Registrations for next game',
+    noRegistrationsYet: 'No registrations yet for this game.',
+    customRulesTitle: 'Customized rules by group and game type',
+    overflowLotteryLabel: 'Overflow lottery',
+    noCustomRulesYet: 'No customized rules are defined yet for this group and game type.',
+    lotteryWhoOutTitle: 'Who moved to bench in lottery rounds',
+    benchedLabel: 'Benched',
+    timesLabel: 'times',
+    benchedCurrentRound: 'Benched in current round',
+    playingCurrentRound: 'Playing in current round',
+    notRegisteredCurrentGame: 'Not registered for current game',
+    yourPosition: 'Your position',
+    adminCredentialsIncorrect: 'Admin credentials are incorrect or not configured.',
+    playerMarkedInactive: 'Player marked as inactive.',
+    deletePlayerFailed: 'Failed to delete player.',
+    playerPasswordUpdated: 'Player password updated.',
+    passwordUpdateFailed: 'Password update failed.',
+    loadDataFailed: 'Failed to load data.',
+    adminLoginSuccess: 'Admin login successful.',
+    choosePlayerRequired: 'Please choose a player from the list.',
+    selectedPlayerNotFound: 'Selected player was not found.',
+    playerLoginConfirmMessage: 'After entering the app, please register for the upcoming game.',
+    playerLoginSuccess: 'Login completed. Please register for the upcoming game.',
+    playerLoginFailed: 'Login failed.',
+    joinGameSuccess: 'Successfully joined the game.',
+    joinGameFailed: 'Cannot join right now.',
+    leaveGameSuccess: 'Registration cancelled.',
+    leaveGameFailed: 'Cannot remove registration right now.',
+    adminOnlyCreateGame: 'Only admin can create new games.',
+    gameUpdatedSuccess: 'Game updated successfully.',
+    gameCreatedSuccess: 'Game created successfully.',
+    saveGameFailed: 'Failed to save game.',
+    gameDeletedSuccess: 'Game deleted.',
+    deleteGameFailed: 'Failed to delete game.',
+    playerAddedSuccess: 'Player added to active list.',
+    addPlayerFailed: 'Failed to add player.',
+    pendingApprovalsTitle: 'Pending approvals',
+    approveButton: 'Approve',
+    rejectButton: 'Reject',
+    blockButton: 'Block',
+    noPendingUsers: 'No users pending approval.',
+    playerApprovedSuccess: 'Player approved successfully.',
+    playerRejectedSuccess: 'Player rejected.',
+    playerBlockedSuccess: 'Player blocked.',
+    approvePlayerFailed: 'Failed to approve player.',
+    rejectPlayerFailed: 'Failed to reject player.',
+    blockPlayerFailed: 'Failed to block player.',
+    lotteryDisabledRule: 'When lottery is disabled, no overflow lottery is applied.',
+    upcomingGame: 'Upcoming game',
+    noUpcomingLotteryGame: 'There is no upcoming game to display lottery results.',
+    lotteryRuleNoY: 'If Y is disabled and players > X, lottery runs across all registered players with equal rotation.',
+    lotteryRuleWithY: 'If Y is enabled, lottery runs when players > X and < Y, or when players > Y.',
+  },
+}
+
+function readStoredLanguage(): AppLanguage {
+  try {
+    const saved = String(localStorage.getItem(LANGUAGE_KEY) || '').trim() as AppLanguage
+    if (SUPPORTED_LANGUAGES.some((entry) => entry.code === saved)) {
+      return saved
+    }
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+  return 'en'
+}
+
+function writeStoredLanguage(language: AppLanguage) {
+  try {
+    localStorage.setItem(LANGUAGE_KEY, language)
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+}
+
+function readRegistrationProfile(): LocalRegistrationProfile | null {
+  try {
+    const raw = localStorage.getItem(REGISTRATION_PROFILE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as LocalRegistrationProfile
+    if (!parsed || !parsed.role || !parsed.username || !parsed.password || !parsed.groupId) {
+      return null
+    }
+    if (parsed.role !== 'admin' && parsed.role !== 'player') {
+      return null
+    }
+    return parsed
+  } catch (_error) {
+    return null
+  }
+}
+
+function writeRegistrationProfile(profile: LocalRegistrationProfile) {
+  try {
+    localStorage.setItem(REGISTRATION_PROFILE_KEY, JSON.stringify(profile))
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+}
+
+function readGroups(): LocalGroup[] {
+  try {
+    const raw = localStorage.getItem(GROUPS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as LocalGroup[]
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((group) => Boolean(group?.id && group?.name))
+  } catch (_error) {
+    return []
+  }
+}
+
+function writeGroups(groups: LocalGroup[]) {
+  try {
+    localStorage.setItem(GROUPS_KEY, JSON.stringify(groups))
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+}
+
+function readGroupConfigs(): LocalGroupConfig[] {
+  try {
+    const raw = localStorage.getItem(GROUP_CONFIGS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as LocalGroupConfig[]
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry) => Boolean(entry?.groupId && Array.isArray(entry.gameTypes)))
+  } catch (_error) {
+    return []
+  }
+}
+
+function writeGroupConfigs(configs: LocalGroupConfig[]) {
+  try {
+    localStorage.setItem(GROUP_CONFIGS_KEY, JSON.stringify(configs))
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+}
+
+function readSelectedGroupId(): string {
+  try {
+    return String(localStorage.getItem(SELECTED_GROUP_KEY) || '')
+  } catch (_error) {
+    return ''
+  }
+}
+
+function writeSelectedGroupId(groupId: string) {
+  try {
+    localStorage.setItem(SELECTED_GROUP_KEY, groupId)
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+}
+
+function createDefaultGameTypeConfig(): LocalGameTypeConfig {
+  const now = new Date()
+  const defaultNextGame = new Date(now)
+  defaultNextGame.setDate(now.getDate() + 7)
+  defaultNextGame.setHours(19, 0, 0, 0)
+
+  const defaultLock = new Date(defaultNextGame)
+  defaultLock.setDate(defaultLock.getDate() - 1)
+  defaultLock.setHours(20, 0, 0, 0)
+
+  return {
+    id: `type-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+    name: 'Open Match',
+    minPlayers: 6,
+    maxPlayersX: 12,
+    enableMaxPlayersY: false,
+    maxPlayersY: 16,
+    lockDateTime: toLocalDateTimeInput(defaultLock.toISOString()),
+    enableLottery: true,
+    nextGameDateTime: toLocalDateTimeInput(defaultNextGame.toISOString()),
+    repeatWeekly: false,
+    repeatDayOfWeek: 5,
+    repeatTime: '19:00',
+  }
+}
+
 const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim()
 const API_BASE = configuredApiBase ? configuredApiBase.replace(/\/$/, '') : ''
-const USER_ID_KEY = 'yomshishi_user_id_v3'
-const ADMIN_TOKEN_KEY = 'yomshishi_admin_token_v3'
+const USER_ID_KEY = 'come2court_user_id_v2'
+const ADMIN_TOKEN_KEY = 'come2court_admin_token_v2'
 
 function readStoredUserId(): number | null {
   try {
@@ -163,15 +1507,15 @@ function clearStoredAdminToken() {
 function getStatusLabel(status: GameStatus): string {
   switch (status) {
     case 'OPEN':
-      return 'פתוח (פחות מ-6)'
+      return 'Open'
     case 'CONFIRMED':
-      return 'מאושר (6-9)'
+      return 'Confirmed'
     case 'WAITING':
-      return 'הגרלה פעילה'
+      return 'Waiting'
     case 'LOCKED':
-      return '12 שחקנים - כולם משחקים'
+      return 'Locked'
     case 'CANCELLED':
-      return 'מבוטל'
+      return 'Cancelled'
     default:
       return status
   }
@@ -193,7 +1537,7 @@ function toLocalDateTimeInput(isoString: string): string {
 
 function createEmptyGameForm(): GameFormState {
   return {
-    title: 'משחק שישי',
+    title: 'Come 2 Court Game',
     location: '',
     notes: '',
     gameDate: createDefaultGameDateInput(),
@@ -245,10 +1589,10 @@ function createGoogleCalendarUrl(game: Game): string {
 
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    text: game.title || 'משחק שישי',
+    text: game.title || 'Come 2 Court game',
     dates: `${formatTime(startTime)}/${formatTime(endTime)}`,
     location: game.location || '',
-    description: game.notes || 'משחק בסדרת YomShishi 3x3',
+    description: game.notes || 'Come 2 Court game',
   })
 
   return `https://calendar.google.com/calendar/render?${params.toString()}`
@@ -262,7 +1606,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const message = (payload as { message?: string })?.message || 'אירעה שגיאה בבקשה לשרת.'
+    const message = (payload as { message?: string })?.message || 'Server request failed.'
     throw new Error(message)
   }
 
@@ -279,12 +1623,28 @@ function IntroSplash({ visible }: { visible: boolean }) {
         <div className="ball" />
         <div className="bounce-shadow" />
       </div>
-      <p className="intro-title">YomShishi Basketball</p>
+      <p className="intro-title">Come 2 Court</p>
     </div>
   )
 }
 
 function App() {
+  const [language, setLanguage] = useState<AppLanguage>(() => readStoredLanguage())
+  const [registrationProfile, setRegistrationProfile] = useState<LocalRegistrationProfile | null>(() =>
+    readRegistrationProfile()
+  )
+  const [groups, setGroups] = useState<LocalGroup[]>(() => readGroups())
+  const [groupConfigs, setGroupConfigs] = useState<LocalGroupConfig[]>(() => readGroupConfigs())
+  const [selectedGroupId, setSelectedGroupId] = useState<string>(() => readSelectedGroupId())
+  const [onboardingRole, setOnboardingRole] = useState<RegistrationRole>('player')
+  const [onboardingGroupName, setOnboardingGroupName] = useState('')
+  const [onboardingGroupId, setOnboardingGroupId] = useState('')
+  const [newGroupName, setNewGroupName] = useState('')
+  const [onboardingUsername, setOnboardingUsername] = useState('')
+  const [onboardingPassword, setOnboardingPassword] = useState('')
+  const [onboardingPasswordConfirm, setOnboardingPasswordConfirm] = useState('')
+  const [onboardingError, setOnboardingError] = useState('')
+
   const [user, setUser] = useState<User | null>(null)
   const [game, setGame] = useState<Game | null>(null)
   const [upcomingGames, setUpcomingGames] = useState<Game[]>([])
@@ -309,9 +1669,70 @@ function App() {
   const [authTab, setAuthTab] = useState<'player' | 'admin'>('player')
   const [activeTab, setActiveTab] = useState<AppTab>('main')
   const [lotteryOverview, setLotteryOverview] = useState<LotteryOverviewResponse | null>(null)
+  const [selectedGameTypeId, setSelectedGameTypeId] = useState('')
+  const [editingGameType, setEditingGameType] = useState<LocalGameTypeConfig>(() => createDefaultGameTypeConfig())
+
+  const text = I18N[language] || I18N.en
+  const translate = (key: string) => text[key] || I18N.en[key] || key
+  const isOnboardingOpen = !registrationProfile || !selectedGroupId
 
   const registeredUserId = useMemo(() => readStoredUserId(), [])
   const hasAdminSession = Boolean(adminToken)
+  const selectedGroup = groups.find((group) => group.id === selectedGroupId) || null
+  const selectedGroupConfig = groupConfigs.find((entry) => entry.groupId === selectedGroupId) || null
+  const selectedGameType = selectedGroupConfig?.gameTypes.find((entry) => entry.id === selectedGameTypeId) || null
+
+  useEffect(() => {
+    document.documentElement.lang = language
+    document.documentElement.dir = RTL_LANGUAGES.has(language) ? 'rtl' : 'ltr'
+  }, [language])
+
+  useEffect(() => {
+    if (!registrationProfile) return
+    setAuthTab(registrationProfile.role)
+    setSelectedGroupId(registrationProfile.groupId)
+    if (registrationProfile.role === 'admin') {
+      setAdminUsername(registrationProfile.username)
+      setAdminPassword(registrationProfile.password)
+    }
+  }, [registrationProfile])
+
+  useEffect(() => {
+    writeGroups(groups)
+  }, [groups])
+
+  useEffect(() => {
+    writeGroupConfigs(groupConfigs)
+  }, [groupConfigs])
+
+  useEffect(() => {
+    if (!selectedGroupId && groups.length) {
+      setSelectedGroupId(groups[0].id)
+      return
+    }
+
+    if (selectedGroupId && !groups.some((group) => group.id === selectedGroupId)) {
+      setSelectedGroupId(groups[0]?.id || '')
+    }
+  }, [groups, selectedGroupId])
+
+  useEffect(() => {
+    writeSelectedGroupId(selectedGroupId)
+  }, [selectedGroupId])
+
+  useEffect(() => {
+    const firstType = selectedGroupConfig?.gameTypes[0]
+    if (!firstType) {
+      setSelectedGameTypeId('')
+      setEditingGameType(createDefaultGameTypeConfig())
+      return
+    }
+
+    if (!selectedGameTypeId || !selectedGroupConfig?.gameTypes.some((item) => item.id === selectedGameTypeId)) {
+      setSelectedGameTypeId(firstType.id)
+      setEditingGameType(firstType)
+    }
+  }, [selectedGroupConfig, selectedGameTypeId])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setShowIntro(false), 2200)
@@ -342,7 +1763,7 @@ function App() {
           await refreshAll()
         }
       } catch (requestError: unknown) {
-        const errorMessage = requestError instanceof Error ? requestError.message : 'טעינת נתונים נכשלה.'
+        const errorMessage = requestError instanceof Error ? requestError.message : translate('loadDataFailed')
         setError(errorMessage)
       }
     }
@@ -399,7 +1820,7 @@ function App() {
   function logout() {
     clearStoredUserId()
     setUser(null)
-    setSuccess('התנתקת בהצלחה.')
+    setSuccess('Signed out successfully.')
     setError('')
   }
 
@@ -408,7 +1829,212 @@ function App() {
     setAdminToken('')
     setAdminPassword('')
     setAdminPlayers([])
-    setSuccess('יצאת ממצב אדמין.')
+    setSuccess('Signed out from admin mode.')
+    setError('')
+  }
+
+  function changeLanguage(nextLanguage: AppLanguage) {
+    setLanguage(nextLanguage)
+    writeStoredLanguage(nextLanguage)
+  }
+
+  async function completeInitialSetup(event: FormEvent) {
+    event.preventDefault()
+    setOnboardingError('')
+
+    const username = onboardingUsername.trim()
+    if (!username) {
+      setOnboardingError(`${translate('username')} is required.`)
+      return
+    }
+
+    if (onboardingPassword.length < 4) {
+      setOnboardingError(translate('passwordShort'))
+      return
+    }
+
+    if (onboardingPassword !== onboardingPasswordConfirm) {
+      setOnboardingError(translate('passwordMismatch'))
+      return
+    }
+
+    let nextGroupId = onboardingGroupId
+
+    if (onboardingRole === 'admin') {
+      const groupName = onboardingGroupName.trim()
+      if (!groupName) {
+        setOnboardingError(`${translate('groupName')} is required.`)
+        return
+      }
+
+      const exists = groups.some((group) => group.name.toLowerCase() === groupName.toLowerCase())
+      if (exists) {
+        setOnboardingError('Group name already exists.')
+        return
+      }
+
+      const groupId = `group-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+      const newGroup: LocalGroup = {
+        id: groupId,
+        name: groupName,
+        createdBy: username,
+      }
+
+      try {
+        await apiRequest<{ ok: true }>('/api/admin/bootstrap', {
+          method: 'POST',
+          body: JSON.stringify({ username, password: onboardingPassword }),
+        })
+      } catch (requestError: unknown) {
+        const errorMessage = requestError instanceof Error ? requestError.message : 'Failed to configure admin account.'
+        setOnboardingError(errorMessage)
+        return
+      }
+
+      nextGroupId = groupId
+      setGroups((current) => [...current, newGroup])
+      setGroupConfigs((current) => [
+        ...current,
+        {
+          groupId,
+          gameTypes: [createDefaultGameTypeConfig()],
+        },
+      ])
+    } else {
+      if (!nextGroupId) {
+        setOnboardingError(`${translate('chooseGroup')} is required.`)
+        return
+      }
+    }
+
+    const profile: LocalRegistrationProfile = {
+      role: onboardingRole,
+      username,
+      password: onboardingPassword,
+      groupId: nextGroupId,
+    }
+
+    writeStoredLanguage(language)
+    writeRegistrationProfile(profile)
+    writeSelectedGroupId(nextGroupId)
+    setRegistrationProfile(profile)
+    setSelectedGroupId(nextGroupId)
+    setOnboardingGroupName('')
+    setOnboardingGroupId('')
+    setOnboardingUsername('')
+    setOnboardingPassword('')
+    setOnboardingPasswordConfirm('')
+  }
+
+  function saveCurrentGameType() {
+    if (!selectedGroupId || !hasAdminSession) return
+
+    const name = editingGameType.name.trim()
+    if (!name) {
+      setError(`${translate('gameTypeName')} is required.`)
+      return
+    }
+
+    const normalizedConfig: LocalGameTypeConfig = {
+      ...editingGameType,
+      name,
+      minPlayers: Math.max(2, Math.min(100, Number(editingGameType.minPlayers) || 6)),
+      maxPlayersX: Math.max(2, Math.min(100, Number(editingGameType.maxPlayersX) || 12)),
+      maxPlayersY: Math.max(2, Math.min(100, Number(editingGameType.maxPlayersY) || 16)),
+      repeatDayOfWeek: Math.max(0, Math.min(6, Number(editingGameType.repeatDayOfWeek) || 5)),
+      repeatTime: editingGameType.repeatTime || '19:00',
+    }
+
+    if (normalizedConfig.maxPlayersX < normalizedConfig.minPlayers) {
+      setError('X must be greater than or equal to minimum players.')
+      return
+    }
+
+    if (normalizedConfig.enableMaxPlayersY && normalizedConfig.maxPlayersY <= normalizedConfig.maxPlayersX) {
+      setError('Y must be greater than X.')
+      return
+    }
+
+    setGroupConfigs((current) => {
+      const existingGroupIndex = current.findIndex((entry) => entry.groupId === selectedGroupId)
+
+      if (existingGroupIndex === -1) {
+        return [...current, { groupId: selectedGroupId, gameTypes: [normalizedConfig] }]
+      }
+
+      const next = [...current]
+      const groupEntry = next[existingGroupIndex]
+      const typeIndex = groupEntry.gameTypes.findIndex((item) => item.id === normalizedConfig.id)
+
+      if (typeIndex === -1) {
+        if (groupEntry.gameTypes.length >= 3) {
+          setError(translate('maxThreeGameTypes'))
+          return current
+        }
+        next[existingGroupIndex] = {
+          ...groupEntry,
+          gameTypes: [...groupEntry.gameTypes, normalizedConfig],
+        }
+      } else {
+        const gameTypes = [...groupEntry.gameTypes]
+        gameTypes[typeIndex] = normalizedConfig
+        next[existingGroupIndex] = {
+          ...groupEntry,
+          gameTypes,
+        }
+      }
+
+      return next
+    })
+
+    setSelectedGameTypeId(normalizedConfig.id)
+    setSuccess('Saved game type settings.')
+    setError('')
+  }
+
+  function addNewGameType() {
+    if (!selectedGroupId || !hasAdminSession) return
+    const existingCount = selectedGroupConfig?.gameTypes.length || 0
+    if (existingCount >= 3) {
+      setError(translate('maxThreeGameTypes'))
+      return
+    }
+
+    const next = createDefaultGameTypeConfig()
+    setEditingGameType(next)
+    setSelectedGameTypeId(next.id)
+  }
+
+  function addGroupByAdmin() {
+    if (!hasAdminSession) return
+    if (groups.length >= 3) {
+      setError(translate('maxThreeGroups'))
+      return
+    }
+
+    const name = newGroupName.trim()
+    if (!name) {
+      setError(`${translate('groupName')} is required.`)
+      return
+    }
+
+    if (groups.some((group) => group.name.toLowerCase() === name.toLowerCase())) {
+      setError('Group name already exists.')
+      return
+    }
+
+    const id = `group-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+    const group: LocalGroup = {
+      id,
+      name,
+      createdBy: adminUsername || 'admin',
+    }
+
+    setGroups((current) => [...current, group])
+    setGroupConfigs((current) => [...current, { groupId: id, gameTypes: [createDefaultGameTypeConfig()] }])
+    setSelectedGroupId(id)
+    setNewGroupName('')
+    setSuccess('Group created.')
     setError('')
   }
 
@@ -430,11 +2056,12 @@ function App() {
       writeStoredAdminToken(response.token)
       setAdminToken(response.token)
       setAdminPassword('')
-      setSuccess('כניסת אדמין הצליחה.')
+      setSuccess(translate('adminLoginSuccess'))
       await refreshAdminPlayers()
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'כניסת אדמין נכשלה.'
-      setError(errorMessage)
+      const errorMessage = requestError instanceof Error ? requestError.message : 'Admin login failed.'
+      const normalizedMessage = language === 'he' ? errorMessage : translate('adminCredentialsIncorrect')
+      setError(normalizedMessage)
     } finally {
       setIsBusy(false)
     }
@@ -442,17 +2069,17 @@ function App() {
 
   async function loginAsSelectedPlayer() {
     if (!selectedPlayerId) {
-      setError('יש לבחור שחקן מהרשימה.')
+      setError(translate('choosePlayerRequired'))
       return
     }
 
     const selectedPlayer = playerOptions.find((item) => item.id === selectedPlayerId)
     if (!selectedPlayer) {
-      setError('השחקן שנבחר לא נמצא.')
+      setError(translate('selectedPlayerNotFound'))
       return
     }
 
-    const confirmed = window.confirm('לאחר הכניסה לאפליקציה יש להירשם למשחק הקרוב')
+    const confirmed = window.confirm(translate('playerLoginConfirmMessage'))
     if (!confirmed) {
       return
     }
@@ -474,9 +2101,9 @@ function App() {
       writeStoredUserId(response.user.id)
       setPlayerPassword('')
       await refreshAll(response.user.id)
-      setSuccess('אחרי לחיצה על אישור יש להירשם למשחק הקרוב.')
+      setSuccess(translate('playerLoginSuccess'))
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'הכניסה נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('playerLoginFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -496,9 +2123,9 @@ function App() {
       })
       setGame(response.game)
       await refreshUpcomingGames(user.id)
-      setSuccess('נרשמת בהצלחה למשחק.')
+      setSuccess(translate('joinGameSuccess'))
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'לא ניתן להצטרף כרגע.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('joinGameFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -518,9 +2145,9 @@ function App() {
       })
       setGame(response.game)
       await refreshUpcomingGames(user.id)
-      setSuccess('ביטלת הרשמה למשחק.')
+      setSuccess(translate('leaveGameSuccess'))
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'לא ניתן להסיר כרגע.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('leaveGameFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -530,7 +2157,7 @@ function App() {
   async function submitGameForm(event: FormEvent) {
     event.preventDefault()
     if (!hasAdminSession) {
-      setError('רק אדמין יכול לפתוח משחקים חדשים.')
+      setError(translate('adminOnlyCreateGame'))
       return
     }
 
@@ -556,19 +2183,19 @@ function App() {
         setGame(response.game)
         setIsEditingGame(false)
         setEditingGameId(null)
-        setSuccess('המשחק עודכן בהצלחה.')
+        setSuccess(translate('gameUpdatedSuccess'))
       } else {
         const response = await apiRequest<{ game: Game; message?: string }>('/api/games', {
           method: 'POST',
           body: JSON.stringify(payload),
         })
         setGame(response.game)
-        setSuccess(response.message || 'המשחק נוצר בהצלחה.')
+        setSuccess(response.message || translate('gameCreatedSuccess'))
       }
 
       await refreshUpcomingGames(user?.id)
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'שמירת המשחק נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('saveGameFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -594,32 +2221,72 @@ function App() {
       setEditingGameId(null)
       setGameForm(createEmptyGameForm())
       await refreshAll(user?.id)
-      setSuccess('המשחק נמחק.')
+      setSuccess(translate('gameDeletedSuccess'))
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'מחיקת משחק נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('deleteGameFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
     }
   }
 
-  async function createPlayerByAdmin(event: FormEvent) {
-    event.preventDefault()
+  async function approvePlayerByAdmin(playerId: number) {
     if (!hasAdminSession) return
 
     setError('')
     setSuccess('')
     setIsBusy(true)
     try {
-      await apiRequest<{ player: PlayerOption }>('/api/admin/players', {
+      await apiRequest(`/api/admin/players/${playerId}/approve`, {
         method: 'POST',
-        body: JSON.stringify({ adminToken, name: newPlayerName }),
+        body: JSON.stringify({ adminToken }),
       })
-      setNewPlayerName('')
       await Promise.all([refreshAdminPlayers(), refreshPlayersList()])
-      setSuccess('השחקן נוסף לרשימת הפעילים.')
+      setSuccess(translate('playerApprovedSuccess'))
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'הוספת שחקן נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('approvePlayerFailed')
+      setError(errorMessage)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function rejectPlayerByAdmin(playerId: number) {
+    if (!hasAdminSession) return
+
+    setError('')
+    setSuccess('')
+    setIsBusy(true)
+    try {
+      await apiRequest(`/api/admin/players/${playerId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ adminToken }),
+      })
+      await refreshAdminPlayers()
+      setSuccess(translate('playerRejectedSuccess'))
+    } catch (requestError: unknown) {
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('rejectPlayerFailed')
+      setError(errorMessage)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function blockPlayerByAdmin(playerId: number) {
+    if (!hasAdminSession) return
+
+    setError('')
+    setSuccess('')
+    setIsBusy(true)
+    try {
+      await apiRequest(`/api/admin/players/${playerId}/block`, {
+        method: 'POST',
+        body: JSON.stringify({ adminToken }),
+      })
+      await refreshAdminPlayers()
+      setSuccess(translate('playerBlockedSuccess'))
+    } catch (requestError: unknown) {
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('blockPlayerFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -638,9 +2305,9 @@ function App() {
         body: JSON.stringify({ adminToken }),
       })
       await Promise.all([refreshAdminPlayers(), refreshPlayersList()])
-      setSuccess('השחקן סומן כלא פעיל.')
+      setSuccess(translate('playerRejectedSuccess'))
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'מחיקת שחקן נכשלה.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('deletePlayerFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -658,9 +2325,9 @@ function App() {
         method: 'POST',
         body: JSON.stringify({ adminToken, password: password.trim() }),
       })
-      setSuccess('סיסמת השחקן עודכנה.')
+      setSuccess(translate('playerPasswordUpdated'))
     } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : 'עדכון סיסמה נכשל.'
+      const errorMessage = requestError instanceof Error ? requestError.message : translate('passwordUpdateFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
@@ -689,30 +2356,159 @@ function App() {
     <main className="app-shell">
       <IntroSplash visible={showIntro} />
 
+      {isOnboardingOpen && (
+        <section className="onboarding-overlay">
+          <form className="onboarding-card" onSubmit={completeInitialSetup}>
+            <h2>{translate('initialSetup')}</h2>
+
+            <label className="onboarding-label" htmlFor="setup-language">
+              {translate('chooseLanguage')}
+            </label>
+            <select
+              id="setup-language"
+              className="select-input"
+              value={language}
+              onChange={(event) => changeLanguage(event.target.value as AppLanguage)}
+            >
+              {SUPPORTED_LANGUAGES.map((entry) => (
+                <option key={entry.code} value={entry.code}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+
+            <p className="onboarding-label">{translate('registerAs')}</p>
+            <div className="onboarding-role-row">
+              <button
+                type="button"
+                className={`auth-chip ${onboardingRole === 'admin' ? 'auth-chip-active' : ''}`}
+                onClick={() => setOnboardingRole('admin')}
+              >
+                {translate('admin')}
+              </button>
+              <button
+                type="button"
+                className={`auth-chip ${onboardingRole === 'player' ? 'auth-chip-active' : ''}`}
+                onClick={() => setOnboardingRole('player')}
+              >
+                {translate('player')}
+              </button>
+            </div>
+
+            <p className="onboarding-label">{translate('createGroupHint')}</p>
+
+            {onboardingRole === 'admin' ? (
+              <input
+                required
+                className="text-input"
+                placeholder={translate('groupName')}
+                value={onboardingGroupName}
+                onChange={(event) => setOnboardingGroupName(event.target.value)}
+              />
+            ) : (
+              <select
+                required
+                className="select-input"
+                value={onboardingGroupId}
+                onChange={(event) => setOnboardingGroupId(event.target.value)}
+                disabled={!groups.length}
+              >
+                <option value="">{translate('chooseGroup')}</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {onboardingRole === 'player' && !groups.length && <p className="message message-error">{translate('noGroupsYet')}</p>}
+
+            <input
+              required
+              className="text-input"
+              placeholder={translate('username')}
+              value={onboardingUsername}
+              onChange={(event) => setOnboardingUsername(event.target.value)}
+            />
+            <input
+              required
+              type="password"
+              className="text-input"
+              placeholder={translate('password')}
+              value={onboardingPassword}
+              onChange={(event) => setOnboardingPassword(event.target.value)}
+            />
+            <input
+              required
+              type="password"
+              className="text-input"
+              placeholder={translate('passwordConfirm')}
+              value={onboardingPasswordConfirm}
+              onChange={(event) => setOnboardingPasswordConfirm(event.target.value)}
+            />
+
+            {onboardingError && <p className="message message-error">{onboardingError}</p>}
+
+            <button type="submit" className="cta cta-primary">
+              {translate('finishSetup')}
+            </button>
+          </form>
+        </section>
+      )}
+
       <section className="hero hero-sport">
         <div className="topbar">
           <div className="admin-corner">
             {hasAdminSession ? (
-              <button disabled={isBusy} className="auth-chip auth-chip-active" onClick={logoutAdmin}>
-                יציאה מאדמין
-              </button>
+              <div className="row">
+                {!user && (
+                  <button
+                    type="button"
+                    className="auth-chip"
+                    onClick={() => setAuthTab('player')}
+                  >
+                    {translate('adminAsPlayer')}
+                  </button>
+                )}
+                <button disabled={isBusy} className="auth-chip auth-chip-active" onClick={logoutAdmin}>
+                  {translate('adminLogout')}
+                </button>
+              </div>
             ) : !user ? (
               <button
                 type="button"
                 className={`auth-chip ${authTab === 'admin' ? 'auth-chip-active' : ''}`}
                 onClick={() => setAuthTab((current) => (current === 'admin' ? 'player' : 'admin'))}
               >
-                {authTab === 'admin' ? 'חזרה' : 'ADMIN'}
+                {authTab === 'admin' ? translate('player') : translate('admin')}
               </button>
             ) : null}
           </div>
 
+          <div className="language-switcher">
+            <label htmlFor="language-select" className="language-switcher-label">
+              {translate('language')}
+            </label>
+            <select
+              id="language-select"
+              className="select-input language-switcher-select"
+              value={language}
+              onChange={(event) => changeLanguage(event.target.value as AppLanguage)}
+            >
+              {SUPPORTED_LANGUAGES.map((entry) => (
+                <option key={entry.code} value={entry.code}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="brand-block">
-            <h1 className="hero-title-neon" aria-label="ספורטק 3X3">
-              <span className="hero-title-line">ספורטק</span>
-              <span className="hero-title-line">3X3</span>
+            <h1 className="hero-title-neon" aria-label="Come 2 Court">
+              <span className="hero-title-line">Come 2</span>
+              <span className="hero-title-line">Court</span>
             </h1>
-            <p className="hero-tagline">ליגת שישי</p>
           </div>
         </div>
 
@@ -720,22 +2516,89 @@ function App() {
           <div className="hero-strip hero-strip-compact">
             <div>
               <strong>{user.name}</strong>
-              <p>כניסה פעילה</p>
+              <p>{translate('signedInSession')}</p>
             </div>
             <button disabled={isBusy} className="cta cta-ghost" onClick={logout}>
-              התנתקות
+              {translate('signOut')}
             </button>
           </div>
         )}
       </section>
 
+      {!isOnboardingOpen && groups.length > 0 && (
+        <section className="card full-width tabs-card" style={{ marginTop: 12 }}>
+          <div className="section-head" style={{ marginBottom: 8 }}>
+            <div>
+              <p className="section-kicker">{translate('groupTabTitle')}</p>
+            </div>
+          </div>
+          <div className="tabs-row">
+            {groups.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                className={`tab-btn ${selectedGroupId === group.id ? 'tab-btn-active' : ''}`}
+                onClick={() => setSelectedGroupId(group.id)}
+              >
+                {group.name}
+              </button>
+            ))}
+          </div>
+
+          {hasAdminSession && (
+            <div className="row" style={{ marginTop: 10 }}>
+              <input
+                className="text-input"
+                placeholder={translate('groupName')}
+                value={newGroupName}
+                onChange={(event) => setNewGroupName(event.target.value)}
+              />
+              <button
+                type="button"
+                className="cta cta-soft"
+                onClick={addGroupByAdmin}
+                disabled={groups.length >= 3}
+              >
+                {translate('addGroup')}
+              </button>
+              <span className="muted">{translate('maxThreeGroups')}</span>
+            </div>
+          )}
+
+          {selectedGroupConfig?.gameTypes?.length ? (
+            <>
+              <div className="section-head" style={{ marginTop: 14, marginBottom: 8 }}>
+                <div>
+                  <p className="section-kicker">{translate('gameTypeTabTitle')}</p>
+                </div>
+              </div>
+              <div className="tabs-row">
+                {selectedGroupConfig.gameTypes.map((gameType) => (
+                  <button
+                    key={gameType.id}
+                    type="button"
+                    className={`tab-btn ${selectedGameTypeId === gameType.id ? 'tab-btn-active' : ''}`}
+                    onClick={() => {
+                      setSelectedGameTypeId(gameType.id)
+                      setEditingGameType(gameType)
+                    }}
+                  >
+                    {gameType.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </section>
+      )}
+
       <section className="grid">
-        {!user && !hasAdminSession && authTab === 'player' && (
+        {!user && authTab === 'player' && (
           <article className="card full-width card-compact landing-card">
             <div className="section-head">
               <div>
                 <p className="section-kicker">Player Select</p>
-                <h2>כניסה לפי רשימת שחקנים פעילים</h2>
+                <h2>{translate('profileSelectTitle')}</h2>
               </div>
             </div>
             <div className="input-grid">
@@ -747,7 +2610,7 @@ function App() {
                   setPlayerPassword('')
                 }}
               >
-                <option value="">בחר שחקן</option>
+                <option value="">{translate('selectPlayer')}</option>
                 {playerOptions.map((player) => (
                   <option key={player.id} value={player.id}>
                     {player.name}
@@ -758,7 +2621,7 @@ function App() {
                 <input
                   type="password"
                   className="text-input"
-                  placeholder="סיסמה (אם קיימת)"
+                  placeholder={translate('playerPasswordPlaceholder')}
                   value={playerPassword}
                   onChange={(event) => setPlayerPassword(event.target.value)}
                 />
@@ -769,7 +2632,7 @@ function App() {
                 onClick={loginAsSelectedPlayer}
                 disabled={isBusy || !selectedPlayerId}
               >
-                אישור כניסה
+                {translate('playerLogin')}
               </button>
             </div>
           </article>
@@ -780,25 +2643,25 @@ function App() {
             <div className="section-head">
               <div>
                 <p className="section-kicker">Admin Bench</p>
-                <h2>כניסת אדמין</h2>
+                <h2>{translate('adminLoginTitle')}</h2>
               </div>
             </div>
             <form className="input-grid" onSubmit={loginAdmin}>
               <input
                 required
-                placeholder="שם משתמש אדמין"
+                placeholder={translate('adminUsernamePlaceholder')}
                 value={adminUsername}
                 onChange={(event) => setAdminUsername(event.target.value)}
               />
               <input
                 required
                 type="password"
-                placeholder="סיסמת אדמין"
+                placeholder={translate('adminPasswordPlaceholder')}
                 value={adminPassword}
                 onChange={(event) => setAdminPassword(event.target.value)}
               />
               <button disabled={isBusy} className="cta cta-primary" type="submit">
-                כניסה כאדמין
+                {translate('adminLoginButton')}
               </button>
             </form>
           </article>
@@ -813,21 +2676,21 @@ function App() {
                   className={`tab-btn ${activeTab === 'main' ? 'tab-btn-active' : ''}`}
                   onClick={() => setActiveTab('main')}
                 >
-                  משחקים והרשמה
+                  {translate('mainTab')}
                 </button>
                 <button
                   type="button"
                   className={`tab-btn ${activeTab === 'rules' ? 'tab-btn-active' : ''}`}
                   onClick={() => setActiveTab('rules')}
                 >
-                  איך ההרשמה עובדת
+                  {translate('rulesTab')}
                 </button>
                 <button
                   type="button"
                   className={`tab-btn ${activeTab === 'lottery' ? 'tab-btn-active' : ''}`}
                   onClick={() => setActiveTab('lottery')}
                 >
-                  סבב הגרלות
+                  {translate('lotteryTab')}
                 </button>
               </div>
             </article>
@@ -838,7 +2701,7 @@ function App() {
               <div className="section-head">
                 <div>
                   <p className="section-kicker">Tip Off</p>
-                  <h2>המשחק הקרוב</h2>
+                  <h2>{translate('upcomingGameTitle')}</h2>
                 </div>
                 {spotlightGame && (
                   <span className={`status-badge status-${spotlightGame.status}`}>
@@ -854,28 +2717,36 @@ function App() {
                       <p className="game-time">{formatGameDateTime(spotlightGame.gameDate)}</p>
                     </div>
                     <div className="game-scoreboard">
-                      <span>נרשמו</span>
+                      <span>{translate('registeredCount')}</span>
                       <strong>{spotlightGame.playersCount}</strong>
                     </div>
                   </div>
 
                   <div className="meta-grid">
-                    <div className="meta-pill">{spotlightGame.location || 'מיקום יעודכן'}</div>
-                    <div className="meta-pill">סגירת הרשמה: {formatGameDateTime(spotlightGame.registrationDeadline)}</div>
-                    <div className="meta-pill">מינימום לפתיחת משחק: 6 שחקנים</div>
+                    <div className="meta-pill">{spotlightGame.location || translate('locationTbd')}</div>
+                    <div className="meta-pill">
+                      {translate('registrationLock')}:{' '}
+                      {selectedGameType?.lockDateTime
+                        ? formatGameDateTime(new Date(selectedGameType.lockDateTime).toISOString())
+                        : formatGameDateTime(spotlightGame.registrationDeadline)}
+                    </div>
+                    <div className="meta-pill">
+                      {translate('rulesSummaryPrefix')}: {translate('rulesMinPlayers')} {selectedGameType?.minPlayers || 6}, X {selectedGameType?.maxPlayersX || 12}
+                      {selectedGameType?.enableMaxPlayersY ? `, Y ${selectedGameType.maxPlayersY}` : ''}
+                    </div>
                   </div>
 
                   {spotlightGame.notes && <p className="muted">{spotlightGame.notes}</p>}
 
                   {user && game && game.viewerPosition && (
                     <p className="message message-ok inline-message">
-                      המיקום שלך: #{game.viewerPosition} | סטטוס: {game.viewerRole === 'PLAYING' ? 'משחק' : 'הוגרלת החוצה'}
+                      {translate('yourPosition')}: #{game.viewerPosition} | {translate('statusLabel')}: {game.viewerRole === 'PLAYING' ? translate('playingLabel') : translate('notPlayingLabel')}
                     </p>
                   )}
 
                   {game?.isRegistrationClosed && (
                     <p className="message message-error inline-message">
-                      ההרשמה נסגרה. הנעילה מתבצעת יום לפני המשחק בשעה {String(apiConfig?.registrationLockHour || 20).padStart(2, '0')}:00.
+                      {translate('registrationClosedMessagePrefix')} {String(apiConfig?.registrationLockHour || 20).padStart(2, '0')}:00.
                     </p>
                   )}
 
@@ -885,7 +2756,7 @@ function App() {
                         className="cta cta-secondary"
                         onClick={() => window.open(createGoogleCalendarUrl(spotlightGame), '_blank')}
                       >
-                        📅 הוסף ללוח השנה
+                        {translate('addToCalendar')}
                       </button>
                     )}
 
@@ -895,19 +2766,19 @@ function App() {
                         className="cta cta-primary"
                         onClick={joinGame}
                       >
-                        {game.isRegistrationClosed ? 'ההרשמה נסגרה' : 'הרשמה למשחק'}
+                        {game.isRegistrationClosed ? translate('registrationClosedShort') : translate('joinGame')}
                       </button>
                     ) : null}
 
                     {game && isUserInGame ? (
                       <button disabled={isBusy} className="cta cta-danger" onClick={leaveGame}>
-                        ביטול הרשמה
+                        {translate('cancelRegistration')}
                       </button>
                     ) : null}
                   </div>
                 </>
               ) : (
-                <p className="muted">אין כרגע משחק מתוכנן. אדמין יכול לפתוח משחק חדש.</p>
+                <p className="muted">{translate('noPlannedGame')}</p>
               )}
             </article>
 
@@ -916,7 +2787,7 @@ function App() {
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">On Deck</p>
-                    <h2>המשחק הבא</h2>
+                    <h2>{translate('nextGameTitle')}</h2>
                   </div>
                   <span className={`status-badge status-${nextGame.status}`}>{getStatusLabel(nextGame.status)}</span>
                 </div>
@@ -926,7 +2797,7 @@ function App() {
                     <p className="game-time">{formatGameDateTime(nextGame.gameDate)}</p>
                   </div>
                   <div className="game-scoreboard game-scoreboard-small">
-                    <span>נרשמו</span>
+                    <span>{translate('registeredCount')}</span>
                     <strong>{nextGame.playersCount}</strong>
                   </div>
                 </div>
@@ -935,85 +2806,268 @@ function App() {
                   style={{ width: '100%', marginTop: '12px' }}
                   onClick={() => window.open(createGoogleCalendarUrl(nextGame), '_blank')}
                 >
-                  📅 הוסף ללוח השנה
+                  {translate('addToCalendar')}
                 </button>
               </article>
             )}
 
             {hasAdminSession && (
+              <>
+                {/* Pending Approvals Section */}
+                <article className="card full-width card-compact">
+                  <div className="section-head">
+                    <div>
+                      <p className="section-kicker">Player Management</p>
+                      <h2>{translate('pendingApprovalsTitle')}</h2>
+                    </div>
+                  </div>
+
+                  <ul className="players players-grid">
+                    {adminPlayers.filter((p) => p.status === 'pending').length === 0 ? (
+                      <li style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '16px', color: '#666' }}>
+                        {translate('noPendingUsers')}
+                      </li>
+                    ) : (
+                      adminPlayers
+                        .filter((p) => p.status === 'pending')
+                        .map((player) => (
+                          <li key={player.id}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                              <div>
+                                <strong>{player.name}</strong>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  className="cta cta-primary"
+                                  style={{ flex: 1, minWidth: '60px', padding: '6px 8px', fontSize: '12px' }}
+                                  onClick={() => approvePlayerByAdmin(player.id)}
+                                >
+                                  {translate('approveButton')}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  className="cta cta-secondary"
+                                  style={{ flex: 1, minWidth: '60px', padding: '6px 8px', fontSize: '12px' }}
+                                  onClick={() => rejectPlayerByAdmin(player.id)}
+                                >
+                                  {translate('rejectButton')}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  className="cta cta-danger"
+                                  style={{ flex: 1, minWidth: '60px', padding: '6px 8px', fontSize: '12px' }}
+                                  onClick={() => blockPlayerByAdmin(player.id)}
+                                >
+                                  {translate('blockButton')}
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        ))
+                    )}
+                  </ul>
+                </article>
+
+                {/* Active Players Section */}
+                <article className="card full-width card-compact">
+                  <div className="section-head">
+                    <div>
+                      <p className="section-kicker">Player Management</p>
+                      <h2>{translate('activePlayersManagement')}</h2>
+                    </div>
+                  </div>
+
+                  <ul className="players players-grid">
+                    {adminPlayers.filter((p) => p.status === 'active').length === 0 ? (
+                      <li style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '16px', color: '#666' }}>
+                        {translate('noActivePlayersYet')}
+                      </li>
+                    ) : (
+                      adminPlayers
+                        .filter((p) => p.status === 'active')
+                        .map((player) => (
+                          <li key={player.id}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                              <div>
+                                <strong>{player.name}</strong>
+                              </div>
+                              <button
+                                disabled={isBusy}
+                                className="cta cta-danger"
+                                onClick={() => removePlayerByAdmin(player.id)}
+                              >
+                                {translate('deleteAction')}
+                              </button>
+                            </div>
+                          </li>
+                        ))
+                    )}
+                  </ul>
+                </article>
+              </>
+            )}
+
+            {hasAdminSession && selectedGroup && (
               <article className="card full-width card-compact">
                 <div className="section-head">
                   <div>
-                    <p className="section-kicker">Player Management</p>
-                    <h2>ניהול שחקנים פעילים</h2>
+                    <p className="section-kicker">{translate('gameTypeTabTitle')}</p>
+                    <h2>{translate('adminSetupTitle')}</h2>
                   </div>
                 </div>
 
-                <form className="input-grid" onSubmit={createPlayerByAdmin}>
-                  <input
-                    required
-                    placeholder="שם שחקן חדש"
-                    value={newPlayerName}
-                    onChange={(event) => setNewPlayerName(event.target.value)}
-                  />
-                  <button disabled={isBusy} className="cta cta-primary" type="submit">
-                    הוספת שחקן
-                  </button>
-                </form>
+                <p className="muted">{selectedGroup.name}</p>
 
-                <ul className="players players-grid" style={{ marginTop: 14 }}>
-                  {adminPlayers.map((player) => (
-                    <li key={player.id}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-                        <div>
-                          <strong>{player.name}</strong> {player.isActive ? '(פעיל)' : '(לא פעיל)'}
-                        </div>
-                        {player.isActive && (
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                            <input
-                              type="password"
-                              className="text-input"
-                              placeholder="הגדר סיסמה"
-                              value={playerPasswordInputs[player.id] || ''}
-                              onChange={(event) =>
-                                setPlayerPasswordInputs((prev) => ({
-                                  ...prev,
-                                  [player.id]: event.target.value,
-                                }))
-                              }
-                              style={{ flex: 1, fontSize: '14px' }}
-                            />
-                            <button
-                              type="button"
-                              disabled={isBusy || !playerPasswordInputs[player.id]?.trim()}
-                              className="cta cta-secondary"
-                              style={{ padding: '8px 12px', fontSize: '12px' }}
-                              onClick={() => {
-                                setPlayerPasswordByAdmin(player.id, playerPasswordInputs[player.id] || '').then(() => {
-                                  setPlayerPasswordInputs((prev) => ({
-                                    ...prev,
-                                    [player.id]: '',
-                                  }))
-                                })
-                              }}
-                            >
-                              שמור סיסמה
-                            </button>
-                          </div>
-                        )}
-                        {player.isActive && (
-                          <button
-                            disabled={isBusy}
-                            className="cta cta-danger"
-                            onClick={() => removePlayerByAdmin(player.id)}
-                          >
-                            מחיקה
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="input-grid">
+                  <input
+                    className="text-input"
+                    placeholder={translate('gameTypeName')}
+                    value={editingGameType.name}
+                    onChange={(event) => setEditingGameType((current) => ({ ...current, name: event.target.value }))}
+                  />
+
+                  <input
+                    type="number"
+                    min={2}
+                    max={100}
+                    className="text-input"
+                    placeholder={translate('minPlayersCount')}
+                    value={editingGameType.minPlayers}
+                    onChange={(event) =>
+                      setEditingGameType((current) => ({ ...current, minPlayers: Number(event.target.value) || 6 }))
+                    }
+                  />
+
+                  <input
+                    type="number"
+                    min={2}
+                    max={100}
+                    className="text-input"
+                    placeholder={translate('maxPlayersX')}
+                    value={editingGameType.maxPlayersX}
+                    onChange={(event) =>
+                      setEditingGameType((current) => ({ ...current, maxPlayersX: Number(event.target.value) || 12 }))
+                    }
+                  />
+
+                  <label className="onboarding-check">
+                    <input
+                      type="checkbox"
+                      checked={editingGameType.enableMaxPlayersY}
+                      onChange={(event) =>
+                        setEditingGameType((current) => ({ ...current, enableMaxPlayersY: event.target.checked }))
+                      }
+                    />
+                    <span>{translate('enableMaxPlayersY')}</span>
+                  </label>
+
+                  {editingGameType.enableMaxPlayersY && (
+                    <input
+                      type="number"
+                      min={2}
+                      max={100}
+                      className="text-input"
+                      placeholder={translate('maxPlayersY')}
+                      value={editingGameType.maxPlayersY}
+                      onChange={(event) =>
+                        setEditingGameType((current) => ({ ...current, maxPlayersY: Number(event.target.value) || 16 }))
+                      }
+                    />
+                  )}
+
+                  <label className="onboarding-label">{translate('lockTime')}</label>
+                  <input
+                    type="datetime-local"
+                    className="text-input"
+                    value={editingGameType.lockDateTime}
+                    onChange={(event) => setEditingGameType((current) => ({ ...current, lockDateTime: event.target.value }))}
+                  />
+
+                  <label className="onboarding-label">{translate('nextGameTime')}</label>
+                  <input
+                    type="datetime-local"
+                    className="text-input"
+                    value={editingGameType.nextGameDateTime}
+                    onChange={(event) =>
+                      setEditingGameType((current) => ({ ...current, nextGameDateTime: event.target.value }))
+                    }
+                  />
+
+                  <label className="onboarding-check">
+                    <input
+                      type="checkbox"
+                      checked={editingGameType.enableLottery}
+                      onChange={(event) =>
+                        setEditingGameType((current) => ({ ...current, enableLottery: event.target.checked }))
+                      }
+                    />
+                    <span>{translate('enableLottery')}</span>
+                  </label>
+
+                  <label className="onboarding-check">
+                    <input
+                      type="checkbox"
+                      checked={editingGameType.repeatWeekly}
+                      onChange={(event) =>
+                        setEditingGameType((current) => ({ ...current, repeatWeekly: event.target.checked }))
+                      }
+                    />
+                    <span>{translate('weeklyRepeat')}</span>
+                  </label>
+
+                  {editingGameType.repeatWeekly && (
+                    <>
+                      <label className="onboarding-label">{translate('repeatDay')}</label>
+                      <select
+                        className="select-input"
+                        value={editingGameType.repeatDayOfWeek}
+                        onChange={(event) =>
+                          setEditingGameType((current) => ({
+                            ...current,
+                            repeatDayOfWeek: Number(event.target.value),
+                          }))
+                        }
+                      >
+                        <option value={0}>Sunday</option>
+                        <option value={1}>Monday</option>
+                        <option value={2}>Tuesday</option>
+                        <option value={3}>Wednesday</option>
+                        <option value={4}>Thursday</option>
+                        <option value={5}>Friday</option>
+                        <option value={6}>Saturday</option>
+                      </select>
+
+                      <label className="onboarding-label">{translate('repeatTime')}</label>
+                      <input
+                        type="time"
+                        className="text-input"
+                        value={editingGameType.repeatTime}
+                        onChange={(event) =>
+                          setEditingGameType((current) => ({ ...current, repeatTime: event.target.value }))
+                        }
+                      />
+                    </>
+                  )}
+                </div>
+
+                <div className="row" style={{ marginTop: 12 }}>
+                  <button type="button" className="cta cta-primary" onClick={saveCurrentGameType}>
+                    {translate('saveGameType')}
+                  </button>
+                  <button
+                    type="button"
+                    className="cta cta-soft"
+                    onClick={addNewGameType}
+                    disabled={(selectedGroupConfig?.gameTypes.length || 0) >= 3}
+                  >
+                    {translate('addGameType')}
+                  </button>
+                  <span className="muted">{translate('maxThreeGameTypes')}</span>
+                </div>
               </article>
             )}
 
@@ -1022,7 +3076,7 @@ function App() {
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">Next Match Setup</p>
-                    <h2>{isEditingGame ? 'עריכת משחק' : 'פתיחת משחק חדש (אדמין בלבד)'}</h2>
+                    <h2>{isEditingGame ? translate('editGameTitle') : translate('createGameAdminOnlyTitle')}</h2>
                   </div>
                 </div>
 
@@ -1038,7 +3092,7 @@ function App() {
                           setIsEditingGame(true)
                         }}
                       >
-                        עריכת {formatGameDate(item.gameDate)}
+                        {translate('editPrefix')} {formatGameDate(item.gameDate)}
                       </button>
                     ))}
                     {upcomingGames.map((item) => (
@@ -1048,7 +3102,7 @@ function App() {
                         disabled={isBusy}
                         onClick={() => deleteGame(item.id)}
                       >
-                        מחיקת {formatGameDate(item.gameDate)}
+                        {translate('deletePrefix')} {formatGameDate(item.gameDate)}
                       </button>
                     ))}
                   </div>
@@ -1056,12 +3110,12 @@ function App() {
                   <form className="input-grid" onSubmit={submitGameForm}>
                     <input
                       required
-                      placeholder="כותרת המשחק"
+                      placeholder={translate('gameTitlePlaceholder')}
                       value={gameForm.title}
                       onChange={(event) => setGameForm((current) => ({ ...current, title: event.target.value }))}
                     />
                     <input
-                      placeholder="מיקום"
+                      placeholder={translate('locationPlaceholder')}
                       value={gameForm.location}
                       onChange={(event) => setGameForm((current) => ({ ...current, location: event.target.value }))}
                     />
@@ -1072,14 +3126,14 @@ function App() {
                       onChange={(event) => setGameForm((current) => ({ ...current, gameDate: event.target.value }))}
                     />
                     <textarea
-                      placeholder="הערות"
+                      placeholder={translate('notesPlaceholder')}
                       value={gameForm.notes}
                       onChange={(event) => setGameForm((current) => ({ ...current, notes: event.target.value }))}
                       style={{ minHeight: 100 }}
                     />
                     <div className="row">
                       <button disabled={isBusy} className="cta cta-primary" type="submit">
-                        {isEditingGame ? 'שמירת שינויים' : 'יצירת משחק'}
+                        {isEditingGame ? translate('saveChanges') : translate('createGame')}
                       </button>
                       {isEditingGame && (
                         <button
@@ -1091,7 +3145,7 @@ function App() {
                             setEditingGameId(null)
                           }}
                         >
-                          ביטול
+                          {translate('cancelAction')}
                         </button>
                       )}
                     </div>
@@ -1105,7 +3159,7 @@ function App() {
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">{index === 0 ? 'Lineup' : 'Next Lineup'}</p>
-                    <h2>{index === 0 ? 'נרשמים למשחק הקרוב' : 'נרשמים למשחק הבא'}</h2>
+                    <h2>{index === 0 ? translate('registrationsUpcomingGame') : translate('registrationsNextGame')}</h2>
                   </div>
                   <span className={`status-badge status-${rosterGame.status}`}>{getStatusLabel(rosterGame.status)}</span>
                 </div>
@@ -1117,7 +3171,7 @@ function App() {
                   style={{ width: '100%', marginBottom: '16px' }}
                   onClick={() => window.open(createGoogleCalendarUrl(rosterGame), '_blank')}
                 >
-                  📅 הוסף ללוח השנה
+                  {translate('addToCalendar')}
                 </button>
                 <ul className="players players-grid">
                   {rosterGame.players.length ? (
@@ -1127,12 +3181,12 @@ function App() {
                           <strong>#{player.position}</strong> {player.name}
                         </span>
                         <span className={`tag ${player.role === 'PLAYING' ? 'tag-play' : 'tag-wait'}`}>
-                          {player.role === 'PLAYING' ? 'משחק' : 'בחוץ בסבב'}
+                          {player.role === 'PLAYING' ? translate('playingLabel') : translate('onBenchThisRound')}
                         </span>
                       </li>
                     ))
                   ) : (
-                    <li className="muted">עדיין אין נרשמים למשחק הזה.</li>
+                    <li className="muted">{translate('noRegistrationsYet')}</li>
                   )}
                 </ul>
               </article>
@@ -1145,23 +3199,38 @@ function App() {
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">Registration Rules</p>
-                    <h2>כללי הרשמה והגרלה</h2>
+                    <h2>{translate('customRulesTitle')}</h2>
                   </div>
                 </div>
 
-                <ul className="rules-list">
-                  <li>ההרשמה נסגרת יום לפני המשחק בשעה {String(apiConfig?.registrationLockHour || 20).padStart(2, '0')}:00.</li>
-                  <li>עד 9 נרשמים: כולם משחקים.</li>
-                  <li>10 נרשמים: אחד יוצא בהגרלה.</li>
-                  <li>11 נרשמים: שניים יוצאים בהגרלה.</li>
-                  <li>12 נרשמים: כולם משחקים (LOCKED).</li>
-                  <li>13 ומעלה: 12 הראשונים בהרכב, והנוספים בסבב המתנה.</li>
-                  <li>ההגרלה מתבצעת אוטומטית רק אחרי נעילת ההרשמה (יום לפני המשחק בשעה {String(apiConfig?.registrationLockHour || 20).padStart(2, '0')}:00).</li>
-                  <li>לפני שעת הנעילה אין שחקנים שמוגרלים החוצה, כדי למנוע הגרלה מוקדמת ומיותרת.</li>
-                  <li>אחרי שעת הנעילה השרת מבצע את ההגרלה לפי סבב הוגן: מי שישב פחות פעמים מקבל עדיפות.</li>
-                  <li>בשוויון במספר הפעמים שישבו בחוץ: מתבצע ערבוב אקראי בין השחקנים הרלוונטיים.</li>
-                  <li>שחקן שיוצא בהגרלה מגיע שעה אחרי תחילת המשחק ויכול להחליף שחקנים עייפים.</li>
-                </ul>
+                {selectedGroup && selectedGameType ? (
+                  <ul className="rules-list">
+                    <li>{translate('rulesActiveGroup')}: {selectedGroup.name}</li>
+                    <li>{translate('rulesActiveGameType')}: {selectedGameType.name}</li>
+                    <li>{translate('rulesMinPlayers')}: {selectedGameType.minPlayers}</li>
+                    <li>{translate('rulesMaxX')}: {selectedGameType.maxPlayersX}</li>
+                    <li>{translate('rulesMaxY')}: {selectedGameType.enableMaxPlayersY ? selectedGameType.maxPlayersY : translate('disabled')}</li>
+                    <li>
+                      {translate('lockTime')}: {formatGameDateTime(new Date(selectedGameType.lockDateTime).toISOString())}
+                    </li>
+                    <li>{translate('overflowLotteryLabel')}: {selectedGameType.enableLottery ? translate('yesLabel') : translate('noLabel')}</li>
+                    {selectedGameType.enableLottery ? (
+                      selectedGameType.enableMaxPlayersY ? (
+                        <li>{translate('lotteryRuleWithY')}</li>
+                      ) : (
+                        <li>{translate('lotteryRuleNoY')}</li>
+                      )
+                    ) : (
+                      <li>{translate('lotteryDisabledRule')}</li>
+                    )}
+                    <li>
+                      {translate('upcomingGame')}: {formatGameDateTime(new Date(selectedGameType.nextGameDateTime).toISOString())}
+                    </li>
+                    <li>{translate('weeklyRepeat')}: {selectedGameType.repeatWeekly ? translate('yesLabel') : translate('noLabel')}</li>
+                  </ul>
+                ) : (
+                  <p className="muted">{translate('noCustomRulesYet')}</p>
+                )}
               </article>
             )}
 
@@ -1170,16 +3239,16 @@ function App() {
                 <div className="section-head">
                   <div>
                     <p className="section-kicker">Lottery Rotation</p>
-                    <h2>מי יצא בסבב ההגרלות</h2>
+                    <h2>{translate('lotteryWhoOutTitle')}</h2>
                   </div>
                 </div>
 
                 {lotteryOverview?.game ? (
                   <p className="muted roster-meta">
-                    {lotteryOverview.game.title} | {formatGameDateTime(lotteryOverview.game.gameDate)} | נרשמו {lotteryOverview.game.playersCount}
+                    {lotteryOverview.game.title} | {formatGameDateTime(lotteryOverview.game.gameDate)} | {translate('registeredCount')} {lotteryOverview.game.playersCount}
                   </p>
                 ) : (
-                  <p className="muted roster-meta">אין כרגע משחק קרוב להצגת הגרלה.</p>
+                  <p className="muted roster-meta">{translate('noUpcomingLotteryGame')}</p>
                 )}
 
                 <ul className="players players-grid lottery-list">
@@ -1187,14 +3256,14 @@ function App() {
                     <li key={player.id} className={player.isOutInCurrentLottery ? 'lottery-out' : ''}>
                       <span>
                         <strong>{player.name}</strong>
-                        {' | '}ישב בחוץ {player.benchCount} פעמים
+                        {' | '}{translate('benchedLabel')} {player.benchCount} {translate('timesLabel')}
                       </span>
                       <span className={`tag ${player.isOutInCurrentLottery ? 'tag-wait' : 'tag-play'}`}>
                         {player.isOutInCurrentLottery
-                          ? 'בחוץ בסבב הנוכחי'
+                          ? translate('benchedCurrentRound')
                           : player.isRegisteredToCurrentGame
-                            ? 'משחק בסבב הנוכחי'
-                            : 'לא רשום למשחק הנוכחי'}
+                            ? translate('playingCurrentRound')
+                            : translate('notRegisteredCurrentGame')}
                       </span>
                     </li>
                   ))}

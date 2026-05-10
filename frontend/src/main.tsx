@@ -1,7 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { AnimatePresence } from 'framer-motion'
+import { useState } from 'react'
 import './index.css'
 import App from './App.tsx'
+import SplashScreen from './SplashScreen.tsx'
 
 const isGithubPagesHost = window.location.hostname.endsWith('github.io')
 const configuredPublicAppUrl = String(import.meta.env.VITE_PUBLIC_APP_URL || '').trim().replace(/\/$/, '')
@@ -18,9 +21,20 @@ if (isGithubPagesHost && configuredPublicAppUrl) {
   }
 }
 
+function Root() {
+  const [showSplash, setShowSplash] = useState(true)
+
+  return (
+    <>
+      <AnimatePresence>{showSplash ? <SplashScreen onFinish={() => setShowSplash(false)} /> : null}</AnimatePresence>
+      <App />
+    </>
+  )
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Root />
   </StrictMode>,
 )
 

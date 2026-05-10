@@ -27,8 +27,8 @@ const FRONTEND_ORIGINS = Array.from(
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'yomshishi.sqlite');
 const FRONTEND_DIST_DIR = path.join(__dirname, '..', 'frontend', 'dist');
-const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || 'gilad').trim();
-const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || 'liga').trim();
+const ADMIN_USERNAME = String(process.env.ADMIN_USERNAME || '').trim();
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || '').trim();
 const ADMIN_TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 const REGISTRATION_LOCK_HOUR = Number(process.env.REGISTRATION_LOCK_HOUR || 20);
 const MAX_ACTIVE_GAMES = 2;
@@ -153,6 +153,43 @@ function verifyPassword(password, storedHash) {
   const iterations = 100000;
   const testHash = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('hex');
   return testHash === hash;
+}
+
+function getSetting(key) {
+  const row = get('SELECT value FROM app_settings WHERE key = ?', [key]);
+  return row ? String(row.value || '') : '';
+}
+
+function setSetting(key, value) {
+  run(
+    `INSERT INTO app_settings (key, value)
+     VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    [String(key), String(value)]
+  );
+}
+
+function getConfiguredAdminCredentials() {
+  const storedUsername = getSetting('admin_username').trim();
+  const storedPasswordHash = getSetting('admin_password_hash').trim();
+
+  if (storedUsername && storedPasswordHash) {
+    return {
+      username: storedUsername,
+      passwordHash: storedPasswordHash,
+      source: 'db',
+    };
+  }
+
+  if (ADMIN_USERNAME && ADMIN_PASSWORD) {
+    return {
+      username: ADMIN_USERNAME,
+      password: ADMIN_PASSWORD,
+      source: 'env',
+    };
+  }
+
+  return null;
 }
 
 function composeDisplayName(firstName, lastName, fallback) {
@@ -661,7 +698,7 @@ async function bootstrapDatabase() {
 
     CREATE TABLE IF NOT EXISTS games (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL DEFAULT 'משחק שישי',
+      title TEXT NOT NULL DEFAULT 'Come 2 Court Game',
       location TEXT NOT NULL DEFAULT '',
       notes TEXT NOT NULL DEFAULT '',
       game_date TEXT NOT NULL,
@@ -702,6 +739,11 @@ async function bootstrapDatabase() {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   ensureColumn('users', 'first_name', "TEXT NOT NULL DEFAULT ''");
@@ -709,8 +751,9 @@ async function bootstrapDatabase() {
   ensureColumn('users', 'password_hash', 'TEXT');
   ensureColumn('users', 'profile_completed', 'INTEGER NOT NULL DEFAULT 1');
   ensureColumn('users', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('users', 'approval_status', "TEXT NOT NULL DEFAULT 'pending'");
 
-  ensureColumn('games', 'title', "TEXT NOT NULL DEFAULT 'משחק שישי'");
+  ensureColumn('games', 'title', "TEXT NOT NULL DEFAULT 'Come 2 Court Game'");
   ensureColumn('games', 'location', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('games', 'notes', "TEXT NOT NULL DEFAULT ''");
   ensureColumn('games', 'created_by_user_id', 'INTEGER');
@@ -750,18 +793,40 @@ async function startServer() {
   });
 
   app.get('/api/config', (_req, res) => {
+    const credentials = getConfiguredAdminCredentials();
     res.json({
       vapidPublicKey: '',
       closedGroupEnabled: false,
       registrationLeadHours: 0,
       registrationLockHour: REGISTRATION_LOCK_HOUR,
       googleClientId: '',
-      adminLoginEnabled: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD),
+      adminLoginEnabled: Boolean(credentials),
     });
   });
 
+  app.post('/api/admin/bootstrap', (req, res) => {
+    const username = String(req.body?.username || '').trim();
+    const password = String(req.body?.password || '').trim();
+
+    if (!username) {
+      return res.status(400).json({ message: 'יש להזין שם משתמש לאדמין.' });
+    }
+
+    if (password.length < 4) {
+      return res.status(400).json({ message: 'סיסמת אדמין חייבת להכיל לפחות 4 תווים.' });
+    }
+
+    const passwordHash = hashPassword(password);
+    setSetting('admin_username', username);
+    setSetting('admin_password_hash', passwordHash);
+    persistDb();
+
+    return res.status(201).json({ ok: true });
+  });
+
   app.post('/api/admin/login', (req, res) => {
-    if (!ADMIN_USERNAME || !ADMIN_PASSWORD) {
+    const credentials = getConfiguredAdminCredentials();
+    if (!credentials) {
       return res.status(503).json({ message: 'כניסת אדמין אינה מוגדרת בשרת.' });
     }
 
@@ -771,7 +836,16 @@ async function startServer() {
       return res.status(400).json({ message: 'יש להזין שם משתמש וסיסמה.' });
     }
 
-    if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+    if (username !== credentials.username) {
+      return res.status(401).json({ message: 'פרטי אדמין שגויים.' });
+    }
+
+    const isValidPassword =
+      credentials.source === 'db'
+        ? verifyPassword(password, credentials.passwordHash)
+        : password === credentials.password;
+
+    if (!isValidPassword) {
       return res.status(401).json({ message: 'פרטי אדמין שגויים.' });
     }
 
@@ -839,13 +913,13 @@ async function startServer() {
     }
 
     const players = all(
-      `SELECT id, name, is_active, created_at
+      `SELECT id, name, approval_status, created_at
        FROM users
-       ORDER BY is_active DESC, name COLLATE NOCASE ASC, id ASC`
+       ORDER BY approval_status DESC, name COLLATE NOCASE ASC, id ASC`
     ).map((row) => ({
       id: Number(row.id),
       name: row.name,
-      isActive: Number(row.is_active) === 1,
+      status: String(row.approval_status || 'pending'),
       createdAt: row.created_at,
     }));
 
@@ -883,7 +957,8 @@ async function startServer() {
       return res.status(404).json({ message: 'השחקן לא נמצא.' });
     }
 
-    run('UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?', [nowIso(), playerId]);
+    // When deleting, move back to pending status instead of marking inactive
+    run('UPDATE users SET approval_status = ?, updated_at = ? WHERE id = ?', ['pending', nowIso(), playerId]);
     persistDb();
     return res.json({ ok: true });
   });
@@ -912,6 +987,70 @@ async function startServer() {
 
     const passwordHash = hashPassword(newPassword);
     run('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', [passwordHash, nowIso(), playerId]);
+    persistDb();
+    return res.json({ ok: true });
+  });
+
+  app.post('/api/admin/players/:playerId/approve', (req, res) => {
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const playerId = Number(req.params.playerId);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: 'מזהה שחקן לא תקין.' });
+    }
+
+    const existing = get('SELECT id FROM users WHERE id = ?', [playerId]);
+    if (!existing) {
+      return res.status(404).json({ message: 'השחקן לא נמצא.' });
+    }
+
+    run('UPDATE users SET approval_status = ?, is_active = 1, updated_at = ? WHERE id = ?', ['active', nowIso(), playerId]);
+    persistDb();
+    return res.json({ ok: true });
+  });
+
+  app.post('/api/admin/players/:playerId/reject', (req, res) => {
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const playerId = Number(req.params.playerId);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: 'מזהה שחקן לא תקין.' });
+    }
+
+    const existing = get('SELECT id FROM users WHERE id = ?', [playerId]);
+    if (!existing) {
+      return res.status(404).json({ message: 'השחקן לא נמצא.' });
+    }
+
+    // Rejecting keeps the user in pending status
+    run('UPDATE users SET approval_status = ?, updated_at = ? WHERE id = ?', ['pending', nowIso(), playerId]);
+    persistDb();
+    return res.json({ ok: true });
+  });
+
+  app.post('/api/admin/players/:playerId/block', (req, res) => {
+    const requester = ensureAdmin(Number(req.body?.userId || 0), String(req.body?.adminToken || ''));
+    if (requester.error) {
+      return res.status(requester.error.status).json({ message: requester.error.message });
+    }
+
+    const playerId = Number(req.params.playerId);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: 'מזהה שחקן לא תקין.' });
+    }
+
+    const existing = get('SELECT id FROM users WHERE id = ?', [playerId]);
+    if (!existing) {
+      return res.status(404).json({ message: 'השחקן לא נמצא.' });
+    }
+
+    run('UPDATE users SET approval_status = ?, updated_at = ? WHERE id = ?', ['blocked', nowIso(), playerId]);
     persistDb();
     return res.json({ ok: true });
   });

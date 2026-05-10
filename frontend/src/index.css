@@ -214,6 +214,68 @@ textarea {
   gap: 12px;
 }
 
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 8, 18, 0.84);
+  backdrop-filter: blur(6px);
+}
+
+.onboarding-card {
+  width: min(94vw, 460px);
+  display: grid;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(8, 21, 44, 0.98), rgba(5, 13, 30, 0.98));
+  border: 1px solid rgba(95, 173, 255, 0.3);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.onboarding-card h2 {
+  margin: 0 0 6px;
+}
+
+.onboarding-label {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.onboarding-role-row {
+  display: flex;
+  gap: 8px;
+}
+
+.onboarding-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+}
+
+.onboarding-check input {
+  accent-color: var(--brand);
+}
+
+.language-switcher {
+  min-width: 170px;
+  display: grid;
+  gap: 4px;
+}
+
+.language-switcher-label {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.language-switcher-select {
+  padding: 8px 10px;
+}
+
 .brand-block {
   max-width: 580px;
 }
@@ -679,6 +741,14 @@ textarea {
 
   .admin-corner {
     min-width: 0;
+  }
+
+  .language-switcher {
+    min-width: 0;
+  }
+
+  .onboarding-role-row {
+    flex-direction: column;
   }
 
   .game-scoreboard {
