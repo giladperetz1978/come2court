@@ -35,7 +35,7 @@ jobs:
           script: |
             set -e
             export DEBIAN_FRONTEND=noninteractive
-            PUBLIC_APP_DOMAIN=144.91.96.77.sslip.io
+            PUBLIC_APP_DOMAIN=come2court.144.91.96.77.sslip.io
             if command -v apt-get >/dev/null 2>&1; then
               apt-get update -y
               apt-get install -y curl git ca-certificates gnupg
@@ -52,8 +52,8 @@ jobs:
                 apt-get install -y caddy
               fi
             fi
-            mkdir -p ~/apps/yomshishi
-            cd ~/apps/yomshishi
+            mkdir -p ~/apps/come2court
+            cd ~/apps/come2court
             if [ ! -d .git ]; then
               git init
               git remote add origin https://github.com/${{ github.repository }}.git
@@ -76,10 +76,10 @@ jobs:
               firewall-cmd --permanent --add-port=443/tcp || true
               firewall-cmd --reload || true
             fi
-            cd ~/apps/yomshishi/frontend
+            cd ~/apps/come2court/frontend
             npm ci
             npm run build
-            cd ~/apps/yomshishi/backend
+            cd ~/apps/come2court/backend
             touch .env
             upsert_env() {
               key="$1"
@@ -104,17 +104,20 @@ jobs:
             if [ -n "$ADMIN_EMAILS" ]; then upsert_env ADMIN_EMAILS "$ADMIN_EMAILS"; fi
             if [ -n "$ADMIN_USERNAME" ]; then upsert_env ADMIN_USERNAME "$ADMIN_USERNAME"; fi
             if [ -n "$ADMIN_PASSWORD" ]; then upsert_env ADMIN_PASSWORD "$ADMIN_PASSWORD"; fi
+            upsert_env PORT "8788"
             upsert_env FRONTEND_ORIGIN "https://$PUBLIC_APP_DOMAIN,http://localhost:5173"
             npm ci --omit=dev
-            pm2 delete yomshishi-backend || true
-            pm2 start ~/apps/yomshishi/backend/server.js --name yomshishi-backend
+            pm2 delete come2court-backend || true
+            pm2 start ~/apps/come2court/backend/server.js --name come2court-backend
             pm2 save
-            printf '%s\n' "$PUBLIC_APP_DOMAIN {" "  reverse_proxy 127.0.0.1:8787" "}" >/etc/caddy/Caddyfile
+            printf '%s\n' "$PUBLIC_APP_DOMAIN {" "  reverse_proxy 127.0.0.1:8788" "}" >/etc/caddy/Caddyfile.come2court
+            sed -i '/^come2court\.144\.91\.96\.77\.sslip\.io/,/^}/!d' /etc/caddy/Caddyfile.come2court || true
+            cat /etc/caddy/Caddyfile.come2court >> /etc/caddy/Caddyfile
             systemctl enable caddy || true
             systemctl restart caddy
             HEALTH_OK=0
             for i in $(seq 1 20); do
-              if curl --silent --fail http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
+              if curl --silent --fail http://127.0.0.1:8788/api/health >/dev/null 2>&1; then
                 HEALTH_OK=1
                 break
               fi
@@ -122,6 +125,6 @@ jobs:
             done
             if [ "$HEALTH_OK" -ne 1 ]; then
               pm2 status
-              pm2 logs yomshishi-backend --lines 120 --nostream || true
+              pm2 logs come2court-backend --lines 120 --nostream || true
               exit 1
             fi

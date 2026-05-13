@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: yomshishi
+    name: come2court
     env: node
     region: frankfurt
     plan: free
@@ -15,7 +15,9 @@ services:
         sync: false
       - key: REGISTRATION_LOCK_HOUR
         value: "20"
+      - key: PORT
+        value: "8787"
     disk:
-      name: yomshishi-data
+      name: come2court-data
       mountPath: /opt/render/project/src/backend/data
       sizeGB: 1
