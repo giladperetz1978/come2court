@@ -1655,8 +1655,6 @@ function App() {
   const [adminPlayers, setAdminPlayers] = useState<AdminPlayer[]>([])
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null)
   const [playerPassword, setPlayerPassword] = useState('')
-  const [newPlayerName, setNewPlayerName] = useState('')
-  const [playerPasswordInputs, setPlayerPasswordInputs] = useState<Record<number, string>>({})
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -2319,26 +2317,6 @@ function App() {
       setSuccess(translate('playerRejectedSuccess'))
     } catch (requestError: unknown) {
       const errorMessage = requestError instanceof Error ? requestError.message : translate('deletePlayerFailed')
-      setError(errorMessage)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  async function setPlayerPasswordByAdmin(playerId: number, password: string) {
-    if (!hasAdminSession || !password.trim()) return
-
-    setError('')
-    setSuccess('')
-    setIsBusy(true)
-    try {
-      await apiRequest(`/api/admin/players/${playerId}/password`, {
-        method: 'POST',
-        body: JSON.stringify({ adminToken, password: password.trim() }),
-      })
-      setSuccess(translate('playerPasswordUpdated'))
-    } catch (requestError: unknown) {
-      const errorMessage = requestError instanceof Error ? requestError.message : translate('passwordUpdateFailed')
       setError(errorMessage)
     } finally {
       setIsBusy(false)
