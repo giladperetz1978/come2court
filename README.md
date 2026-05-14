@@ -1,4 +1,4 @@
-# YomShishi 3x3 PWA
+# Come 2 Court
 
 Closed-group app for managing Friday 3v3 basketball games with manual game creation, automatic waitlist logic, and push reminders.
 
