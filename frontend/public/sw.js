@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yomshishi-pwa-v8';
+const CACHE_NAME = 'filltheteam-pwa-v2';
 const OFFLINE_URLS = ['/', '/index.html', '/manifest.webmanifest'];
 
 function shouldBypassCache(url) {
