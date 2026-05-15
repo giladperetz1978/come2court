@@ -15,15 +15,34 @@ const DEFAULT_LOCAL_ORIGINS = [
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`,
 ];
+
+function normalizeOriginValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  if (raw === '*') {
+    return '*';
+  }
+
+  try {
+    return new URL(raw).origin.toLowerCase();
+  } catch (_error) {
+    return raw.replace(/\/+$/, '').toLowerCase();
+  }
+}
+
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || DEFAULT_LOCAL_ORIGINS.join(',');
 const FRONTEND_ORIGINS = Array.from(
   new Set(
     FRONTEND_ORIGIN.split(',')
-      .map((origin) => origin.trim())
+      .map((origin) => normalizeOriginValue(origin))
       .filter(Boolean)
-      .concat(DEFAULT_LOCAL_ORIGINS)
+      .concat(DEFAULT_LOCAL_ORIGINS.map((origin) => normalizeOriginValue(origin)))
   )
 );
+const ALLOW_ALL_ORIGINS = FRONTEND_ORIGINS.includes('*');
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'yomshishi.sqlite');
 const FRONTEND_DIST_DIR = path.join(__dirname, '..', 'frontend', 'dist');
@@ -775,7 +794,8 @@ async function startServer() {
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || FRONTEND_ORIGINS.includes(origin)) {
+        const normalizedOrigin = normalizeOriginValue(origin);
+        if (!origin || ALLOW_ALL_ORIGINS || FRONTEND_ORIGINS.includes(normalizedOrigin)) {
           callback(null, true);
           return;
         }

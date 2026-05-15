@@ -17,6 +17,8 @@ services:
         value: "20"
       - key: PORT
         value: "8787"
+      - key: FRONTEND_ORIGIN
+        value: "https://come2court.com,https://www.come2court.com,https://come2court.onrender.com,http://localhost:5173,http://127.0.0.1:5173"
     disk:
       name: come2court-data
       mountPath: /opt/render/project/src/backend/data
