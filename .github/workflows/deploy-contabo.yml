@@ -107,7 +107,7 @@ jobs:
             if [ -n "$ADMIN_USERNAME" ]; then upsert_env ADMIN_USERNAME "$ADMIN_USERNAME"; fi
             if [ -n "$ADMIN_PASSWORD" ]; then upsert_env ADMIN_PASSWORD "$ADMIN_PASSWORD"; fi
             upsert_env PORT "8788"
-            upsert_env FRONTEND_ORIGIN "https://$PUBLIC_APP_DOMAIN,http://localhost:5173"
+            upsert_env FRONTEND_ORIGIN "https://$PUBLIC_APP_DOMAIN,https://www.$PUBLIC_APP_DOMAIN,http://localhost:5173,http://127.0.0.1:5173"
             npm ci --omit=dev
             pm2 delete come2court-backend || true
             pm2 start ~/apps/come2court/backend/server.js --name come2court-backend
