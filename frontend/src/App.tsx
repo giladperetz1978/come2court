@@ -81,7 +81,7 @@ type GameFormState = {
   gameDate: string
 }
 
-type AppTab = 'main' | 'rules' | 'lottery'
+type AppTab = 'main' | 'rules' | 'lottery' | 'instructions'
 
 type LotteryOverviewPlayer = {
   id: number
@@ -114,10 +114,21 @@ type LocalRegistrationProfile = {
   groupId: string
 }
 
+type LocalGroupPaymentLink = {
+  id: string
+  url: string
+  label: string
+}
+
 type LocalGroup = {
   id: string
   name: string
   createdBy: string
+  groupPasswordHash: string
+  groupPasswordSalt: string
+  // Legacy plaintext password kept only for one-way migration from older local data.
+  groupPassword?: string
+  paymentLinks?: LocalGroupPaymentLink[]
 }
 
 type LocalGameTypeConfig = {
@@ -158,7 +169,7 @@ const REGISTRATION_PROFILE_KEY = 'come2court_registration_profile_v2'
 const GROUPS_KEY = 'come2court_groups_v2'
 const GROUP_CONFIGS_KEY = 'come2court_group_configs_v2'
 const SELECTED_GROUP_KEY = 'come2court_selected_group_v2'
-const HERO_TITLE_LOOP_WORDS = ['COME', '2', 'COURT'] as const
+const HERO_TITLE_LOOP_WORDS = ['FILL', 'THE', 'TEAM'] as const
 
 const I18N: Record<AppLanguage, Record<string, string>> = {
   en: {
@@ -166,57 +177,83 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     initialSetup: 'Initial Setup',
     chooseLanguage: 'Choose language',
     registerAs: 'Register as',
-    admin: 'Admin',
-    player: 'Player',
+    admin: 'Organizer',
+    player: 'Member',
     username: 'Username',
     password: 'Password',
     passwordConfirm: 'Confirm password',
     finishSetup: 'Finish setup',
     passwordMismatch: 'Passwords do not match.',
     passwordShort: 'Password must be at least 4 characters.',
-    profileSelectTitle: 'Sign in by active players list',
-    selectPlayer: 'Select player',
+    profileSelectTitle: 'Sign in by active members list',
+    selectPlayer: 'Select member',
     playerPasswordPlaceholder: 'Password (if set)',
     playerLogin: 'Enter',
-    adminLoginTitle: 'Admin sign in',
-    adminUsernamePlaceholder: 'Admin username',
-    adminPasswordPlaceholder: 'Admin password',
-    adminLoginButton: 'Sign in as admin',
-    mainTab: 'Games & Registration',
+    adminLoginTitle: 'Organizer sign in',
+    adminUsernamePlaceholder: 'Organizer username',
+    adminPasswordPlaceholder: 'Organizer password',
+    adminLoginButton: 'Sign in as organizer',
+    mainTab: 'Events & Registration',
     rulesTab: 'How registration works',
     lotteryTab: 'Lottery rotation',
+    instructionsTab: 'Registration guide',
+    welcomeTitle: 'Welcome to Fill the Team',
+    welcomeIntro: 'Fill the Team helps you manage fixed groups and handle registrations in an organized way.',
+    welcomeBullet1: 'Create and manage groups with regular members.',
+    welcomeBullet2: 'Register to different event types and track participation.',
+    welcomeBullet3: 'Set your own event and registration rules as organizer.',
+    welcomeAcknowledge: 'I read and understand',
+    registrationGuideTitle: 'How to register',
+    registrationGuideIntro: 'Follow these steps to complete registration quickly:',
+    registrationGuideStep1: 'Choose your language first.',
+    registrationGuideStep2: 'Select your role: Organizer or Member.',
+    registrationGuideStep3: 'If you are Organizer create a group, if you are Member choose an existing group.',
+    registrationGuideStep4: 'Enter username and password, then tap Finish setup.',
+    registrationGuideClose: 'Close guide',
     groupName: 'Group name',
+    groupPassword: 'Group password',
     chooseGroup: 'Choose group',
-    createGroupHint: 'Admin creates a new group. Player joins an existing group.',
-    noGroupsYet: 'No groups yet. Create a group as admin first.',
+    groupNameTaken: 'Group name already exists.',
+    groupNotFound: 'Group name was not found.',
+    groupPasswordIncorrect: 'Group password is incorrect.',
+    groupPasswordShort: 'Group password must be at least 4 characters.',
+    groupUpdated: 'Group updated successfully.',
+    groupDeleted: 'Group deleted successfully.',
+    deleteGroup: 'Delete group',
+    editGroup: 'Edit group',
+    newGroupPassword: 'New group password',
+    keepCurrentPassword: 'Leave empty to keep current password',
+    deleteGroupConfirm: 'Are you sure you want to delete this group?',
+    createGroupHint: 'Organizer creates a new group. Member joins an existing group.',
+    noGroupsYet: 'No groups yet. Create a group as organizer first.',
     groupTabTitle: 'Groups',
-    gameTypeTabTitle: 'Game types',
-    adminAsPlayer: 'Enter as player',
-    adminSetupTitle: 'Admin game setup',
-    gameTypeName: 'Game type name',
-    minPlayersCount: 'Minimum players',
-    maxPlayersX: 'Max players round 1',
+    gameTypeTabTitle: 'Event types',
+    adminAsPlayer: 'Enter as member',
+    adminSetupTitle: 'Organizer event setup',
+    gameTypeName: 'Event type name',
+    minPlayersCount: 'Minimum participants',
+    maxPlayersX: 'Max participants round 1',
     enableMaxPlayersY: 'Enable round 2',
-    maxPlayersY: 'Max players round 2',
-    lockPlayersCount: 'Lock players count',
+    maxPlayersY: 'Max participants round 2',
+    lockPlayersCount: 'Lock participants count',
     lockTime: 'Lock date and time',
-    enableLottery: 'Enable lottery for overflow players',
-    nextGameTime: 'Next game date and time',
+    enableLottery: 'Enable lottery for overflow participants',
+    nextGameTime: 'Next event date and time',
     weeklyRepeat: 'Repeat weekly',
     repeatDay: 'Repeat day',
     repeatTime: 'Repeat time',
-    saveGameType: 'Save game type',
-    addGameType: 'Add game type',
-    maxThreeGameTypes: 'Up to 3 game types per group',
+    saveGameType: 'Save event type',
+    addGameType: 'Add event type',
+    maxThreeGameTypes: 'Up to 3 event types per group',
     addGroup: 'Add group',
     maxThreeGroups: 'Up to 3 groups',
-    adminLogout: 'Exit admin',
+    adminLogout: 'Exit organizer',
     signedInSession: 'Active session',
     signOut: 'Sign out',
     rulesSummaryPrefix: 'Rules',
     rulesActiveGroup: 'Active group',
-    rulesActiveGameType: 'Active game type',
-    rulesMinPlayers: 'Minimum players',
+    rulesActiveGameType: 'Active event type',
+    rulesMinPlayers: 'Minimum participants',
     rulesMaxX: 'Maximum round 1',
     rulesMaxY: 'Maximum round 2',
     disabled: 'Disabled',
@@ -305,61 +342,93 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     rejectPlayerFailed: 'Failed to reject player.',
     blockPlayerFailed: 'Failed to block player.',
     lotteryDisabledRule: 'When lottery is disabled, no overflow lottery is applied.',
-    upcomingGame: 'Upcoming game',
-    noUpcomingLotteryGame: 'There is no upcoming game to display lottery results.',
-    lotteryRuleNoY: 'If Y is disabled and players > X, lottery runs across all registered players with equal rotation.',
-    lotteryRuleWithY: 'If round 2 is enabled, lottery runs when players exceed round 1 and stay below round 2, or when players exceed round 2.',
+    upcomingGame: 'Upcoming event',
+    noUpcomingLotteryGame: 'There is no upcoming event to display lottery results.',
+    lotteryRuleNoY: 'If Y is disabled and participants > X, lottery runs across all registered members with equal rotation.',
+    lotteryRuleWithY: 'If round 2 is enabled, lottery runs when participants exceed round 1 and stay below round 2, or when participants exceed round 2.',
+    paymentLinksTitle: 'Payment Links',
+    addPaymentLink: 'Add payment link',
+    paymentLinkUrl: 'Payment link URL',
+    paymentLinkLabel: 'Link label (e.g. Bit, PayPal)',
+    deletePaymentLink: 'Remove link',
+    noPaymentLinks: 'No payment links yet',
   },
   he: {
     language: 'שפה',
     initialSetup: 'הגדרה ראשונית',
     chooseLanguage: 'בחירת שפה',
     registerAs: 'רישום כ',
-    admin: 'אדמין',
-    player: 'שחקן',
+    admin: 'ארגונאי',
+    player: 'חבר',
     username: 'שם משתמש',
     password: 'סיסמה',
     passwordConfirm: 'אימות סיסמה',
     finishSetup: 'סיום הגדרה',
     passwordMismatch: 'הסיסמאות אינן תואמות.',
     passwordShort: 'הסיסמה חייבת להכיל לפחות 4 תווים.',
-    profileSelectTitle: 'כניסה לפי רשימת שחקנים פעילים',
-    selectPlayer: 'בחר שחקן',
+    profileSelectTitle: 'כניסה לפי רשימת חברים פעילים',
+    selectPlayer: 'בחר חבר',
     playerPasswordPlaceholder: 'סיסמה (אם קיימת)',
     playerLogin: 'אישור כניסה',
-    adminLoginTitle: 'כניסת אדמין',
-    adminUsernamePlaceholder: 'שם משתמש אדמין',
-    adminPasswordPlaceholder: 'סיסמת אדמין',
-    adminLoginButton: 'כניסה כאדמין',
-    mainTab: 'משחקים והרשמה',
+    adminLoginTitle: 'כניסת ארגונאי',
+    adminUsernamePlaceholder: 'שם משתמש ארגונאי',
+    adminPasswordPlaceholder: 'סיסמת ארגונאי',
+    adminLoginButton: 'כניסה כארגונאי',
+    mainTab: 'אירועים והרשמה',
     rulesTab: 'איך ההרשמה עובדת',
     lotteryTab: 'סבב הגרלות',
+    instructionsTab: 'הוראות הרשמה',
+    welcomeTitle: 'ברוכים הבאים ל-Fill the Team',
+    welcomeIntro: 'Fill the Team מאפשרת לנהל קבוצות קבועות ולהתנהל בצורה מסודרת מול הרשמות לאירועים.',
+    welcomeBullet1: 'יצירה וניהול של קבוצות עם חברים קבועים.',
+    welcomeBullet2: 'הרשמה לסוגי אירועים שונים ומעקב אחרי היענות.',
+    welcomeBullet3: 'התאמה של כללי האירוע וההרשמה לפי הצרכים שלכם.',
+    welcomeAcknowledge: 'קראתי והבנתי',
+    registrationGuideTitle: 'איך נרשמים',
+    registrationGuideIntro: 'כך משלימים הרשמה במהירות:',
+    registrationGuideStep1: 'בחרו קודם את שפת הממשק.',
+    registrationGuideStep2: 'בחרו תפקיד: ארגונאי או חבר.',
+    registrationGuideStep3: 'ארגונאי יוצר קבוצה חדשה, חבר מצטרף לקבוצה קיימת.',
+    registrationGuideStep4: 'מלאו שם משתמש וסיסמה ולחצו על סיום הגדרה.',
+    registrationGuideClose: 'סגור הוראות',
     groupName: 'שם קבוצה',
+    groupPassword: 'סיסמת קבוצה',
     chooseGroup: 'בחירת קבוצה',
-    createGroupHint: 'אדמין יוצר קבוצה חדשה. שחקן מצטרף לקבוצה קיימת.',
-    noGroupsYet: 'אין קבוצות עדיין. קודם צריך ליצור קבוצה כאדמין.',
+    groupNameTaken: 'שם קבוצה כבר קיים במערכת.',
+    groupNotFound: 'שם הקבוצה לא נמצא.',
+    groupPasswordIncorrect: 'סיסמת הקבוצה שגויה.',
+    groupPasswordShort: 'סיסמת קבוצה חייבת להכיל לפחות 4 תווים.',
+    groupUpdated: 'הקבוצה עודכנה בהצלחה.',
+    groupDeleted: 'הקבוצה נמחקה בהצלחה.',
+    deleteGroup: 'מחיקת קבוצה',
+    editGroup: 'עריכת קבוצה',
+    newGroupPassword: 'סיסמת קבוצה חדשה',
+    keepCurrentPassword: 'השאירו ריק כדי לשמור על הסיסמה הנוכחית',
+    deleteGroupConfirm: 'האם למחוק את הקבוצה הזו?',
+    createGroupHint: 'ארגונאי יוצר קבוצה חדשה. חבר מצטרף לקבוצה קיימת.',
+    noGroupsYet: 'אין קבוצות עדיין. קודם צריך ליצור קבוצה כארגונאי.',
     groupTabTitle: 'קבוצות',
-    gameTypeTabTitle: 'סוגי משחק',
-    adminAsPlayer: 'כניסה כשחקן',
-    adminSetupTitle: 'הגדרות משחק לאדמין',
-    gameTypeName: 'שם סוג המשחק',
-    minPlayersCount: 'כמות מינימלית',
-    maxPlayersX: 'כמות מקסימלית סבב 1',
+    gameTypeTabTitle: 'סוגי אירוע',
+    adminAsPlayer: 'כניסה כחבר',
+    adminSetupTitle: 'הגדרות אירוע לארגונאי',
+    gameTypeName: 'שם סוג האירוע',
+    minPlayersCount: 'מספר מינימלי משתתפים',
+    maxPlayersX: 'מספר מקסימלי סבב 1',
     enableMaxPlayersY: 'הפעלת סבב 2',
-    maxPlayersY: 'כמות מקסימלית סבב 2',
-    lockPlayersCount: 'כמות שחקנים לנעילה',
+    maxPlayersY: 'מספר מקסימלי סבב 2',
+    lockPlayersCount: 'נעילת מספר משתתפים',
     lockTime: 'זמן ותאריך נעילה',
     enableLottery: 'הפעלת הגרלה לעודפים',
-    nextGameTime: 'תאריך ושעת המשחק הקרוב',
+    nextGameTime: 'תאריך ושעת האירוע הקרוב',
     weeklyRepeat: 'חזרה שבועית',
     repeatDay: 'יום קבוע',
     repeatTime: 'שעה קבועה',
-    saveGameType: 'שמירת סוג משחק',
-    addGameType: 'הוספת סוג משחק',
-    maxThreeGameTypes: 'עד 3 סוגי משחק לכל קבוצה',
+    saveGameType: 'שמירת סוג אירוע',
+    addGameType: 'הוספת סוג אירוע',
+    maxThreeGameTypes: 'עד 3 סוגי אירוע לכל קבוצה',
     addGroup: 'הוספת קבוצה',
     maxThreeGroups: 'עד 3 קבוצות',
-    adminLogout: 'יציאה מאדמין',
+    adminLogout: 'יציאה מארגונאות',
     signedInSession: 'כניסה פעילה',
     signOut: 'התנתקות',
     rulesSummaryPrefix: 'חוקים',
@@ -454,10 +523,16 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     rejectPlayerFailed: 'דחיית השחקן נכשלה.',
     blockPlayerFailed: 'חסימת השחקן נכשלה.',
     lotteryDisabledRule: 'כאשר ההגרלה כבויה, אין הגרלה לעודפים.',
-    upcomingGame: 'משחק קרוב',
-    noUpcomingLotteryGame: 'אין כרגע משחק קרוב להצגת הגרלה.',
-    lotteryRuleNoY: 'אם Y לא מסומן ומספר השחקנים גדול מ־X, תיערך הגרלה עם רוטציה שווה בין כל הנרשמים.',
-    lotteryRuleWithY: 'אם Y מסומן, ההגרלה תיערך כשמספר השחקנים גדול מ־X וקטן מ־Y, או גדול מ־Y.',
+    upcomingGame: 'אירוע קרוב',
+    noUpcomingLotteryGame: 'אין כרגע אירוע קרוב להצגת הגרלה.',
+    lotteryRuleNoY: 'אם סבב 2 לא מסומן ומספר המשתתפים גדול מ־X, תיערך הגרלה עם רוטציה שווה בין כל הנרשמים.',
+    lotteryRuleWithY: 'אם סבב 2 מסומן, ההגרלה תיערך כשמספר המשתתפים גדול מ־X וקטן מ־Y, או גדול מ־Y.',
+    paymentLinksTitle: 'קישורי תשלום',
+    addPaymentLink: 'הוסף קישור תשלום',
+    paymentLinkUrl: 'כתובת קישור התשלום',
+    paymentLinkLabel: 'תווית קישור (למשל Bit, PayPal)',
+    deletePaymentLink: 'הסר קישור',
+    noPaymentLinks: 'אין קישורי תשלום עדיין',
   },
   fr: {
     language: 'Langue',
@@ -483,6 +558,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     mainTab: 'Matchs et inscription',
     rulesTab: 'Regles d inscription',
     lotteryTab: 'Rotation du tirage',
+    instructionsTab: 'Guide d inscription',
+    registrationGuideTitle: 'Comment s inscrire',
+    registrationGuideIntro: 'Suivez ces etapes pour terminer l inscription rapidement :',
+    registrationGuideStep1: 'Choisissez d abord la langue.',
+    registrationGuideStep2: 'Selectionnez votre role : Admin ou Joueur.',
+    registrationGuideStep3: 'Si vous etes Admin, creez un groupe ; si vous etes Joueur, choisissez un groupe existant.',
+    registrationGuideStep4: 'Saisissez nom d utilisateur et mot de passe, puis terminez la configuration.',
+    registrationGuideClose: 'Fermer le guide',
     adminLogout: 'Quitter admin',
     signedInSession: 'Session active',
     signOut: 'Se deconnecter',
@@ -577,10 +660,16 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     rejectPlayerFailed: 'Echec du rejet du joueur.',
     blockPlayerFailed: 'Echec du blocage du joueur.',
     lotteryDisabledRule: 'Si le tirage est desactive, aucun tirage d excedent ne s applique.',
-    upcomingGame: 'Match a venir',
-    noUpcomingLotteryGame: 'Aucun match a venir pour afficher le tirage.',
-    lotteryRuleNoY: 'Si Y est desactive et joueurs > X, tirage sur tous les inscrits avec rotation egale.',
-    lotteryRuleWithY: 'Si Y est active, tirage quand joueurs > X et < Y, ou quand joueurs > Y.',
+    upcomingGame: 'Evenement a venir',
+    noUpcomingLotteryGame: 'Aucun evenement a venir pour afficher le tirage.',
+    lotteryRuleNoY: 'Si Y est desactive et participants > X, tirage sur tous les inscrits avec rotation egale.',
+    lotteryRuleWithY: 'Si Y est active, tirage quand participants > X et < Y, ou quand participants > Y.',
+    paymentLinksTitle: 'Liens de paiement',
+    addPaymentLink: 'Ajouter lien de paiement',
+    paymentLinkUrl: 'URL du lien de paiement',
+    paymentLinkLabel: 'Etiquette du lien (ex. Bit, PayPal)',
+    deletePaymentLink: 'Supprimer lien',
+    noPaymentLinks: 'Aucun lien de paiement pour le moment',
   },
   de: {
     language: 'Sprache',
@@ -606,6 +695,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     mainTab: 'Spiele und Anmeldung',
     rulesTab: 'Wie die Anmeldung funktioniert',
     lotteryTab: 'Losrotation',
+    instructionsTab: 'Anleitung',
+    registrationGuideTitle: 'So funktioniert die Registrierung',
+    registrationGuideIntro: 'Folge diesen Schritten fur eine schnelle Registrierung:',
+    registrationGuideStep1: 'Wahle zuerst die Sprache.',
+    registrationGuideStep2: 'Wahle deine Rolle: Admin oder Spieler.',
+    registrationGuideStep3: 'Als Admin erstelle eine Gruppe, als Spieler wahle eine bestehende Gruppe.',
+    registrationGuideStep4: 'Benutzername und Passwort eingeben, dann Einrichtung abschliessen.',
+    registrationGuideClose: 'Anleitung schliessen',
     adminLogout: 'Admin verlassen',
     signedInSession: 'Aktive Sitzung',
     signOut: 'Abmelden',
@@ -701,9 +798,15 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     blockPlayerFailed: 'Spieler konnte nicht gesperrt werden.',
     lotteryDisabledRule: 'Wenn Losung deaktiviert ist, wird kein Ueberlauf gelost.',
     upcomingGame: 'Kommendes Spiel',
-    noUpcomingLotteryGame: 'Kein kommendes Spiel fuer Losanzeige.',
-    lotteryRuleNoY: 'Wenn Y deaktiviert und Spieler > X, Losung ueber alle Registrierten mit gleicher Rotation.',
-    lotteryRuleWithY: 'Wenn Y aktiviert, Losung bei Spieler > X und < Y oder bei Spieler > Y.',
+    noUpcomingLotteryGame: 'Kein kommendes Ereignis fuer Losanzeige.',
+    lotteryRuleNoY: 'Wenn Y deaktiviert und Teilnehmer > X, Losung ueber alle Registrierten mit gleicher Rotation.',
+    lotteryRuleWithY: 'Wenn Y aktiviert, Losung bei Teilnehmer > X und < Y oder bei Teilnehmer > Y.',
+    paymentLinksTitle: 'Zahlungslinks',
+    addPaymentLink: 'Zahlungslink hinzufuegen',
+    paymentLinkUrl: 'Zahlungslink-URL',
+    paymentLinkLabel: 'Link-Label (z.B. Bit, PayPal)',
+    deletePaymentLink: 'Link entfernen',
+    noPaymentLinks: 'Noch keine Zahlungslinks',
   },
   es: {
     language: 'Idioma',
@@ -729,6 +832,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     mainTab: 'Partidos y registro',
     rulesTab: 'Como funciona el registro',
     lotteryTab: 'Rotacion de sorteo',
+    instructionsTab: 'Guia de registro',
+    registrationGuideTitle: 'Como registrarte',
+    registrationGuideIntro: 'Sigue estos pasos para completar el registro rapidamente:',
+    registrationGuideStep1: 'Primero elige el idioma.',
+    registrationGuideStep2: 'Selecciona tu rol: Admin o Jugador.',
+    registrationGuideStep3: 'Si eres Admin crea un grupo, si eres Jugador elige un grupo existente.',
+    registrationGuideStep4: 'Ingresa usuario y contrasena y pulsa finalizar configuracion.',
+    registrationGuideClose: 'Cerrar guia',
     adminLogout: 'Salir de admin',
     signedInSession: 'Sesion activa',
     signOut: 'Cerrar sesion',
@@ -823,10 +934,16 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     rejectPlayerFailed: 'No se pudo rechazar al jugador.',
     blockPlayerFailed: 'No se pudo bloquear al jugador.',
     lotteryDisabledRule: 'Si el sorteo esta desactivado, no se aplica sorteo de excedentes.',
-    upcomingGame: 'Partido proximo',
-    noUpcomingLotteryGame: 'No hay partido proximo para mostrar sorteo.',
-    lotteryRuleNoY: 'Si Y esta desactivado y jugadores > X, sorteo entre todos los registrados con rotacion igual.',
-    lotteryRuleWithY: 'Si Y esta activado, sorteo cuando jugadores > X y < Y, o cuando jugadores > Y.',
+    upcomingGame: 'Evento proximo',
+    noUpcomingLotteryGame: 'No hay evento proximo para mostrar sorteo.',
+    lotteryRuleNoY: 'Si Y esta desactivado y participantes > X, sorteo entre todos los registrados con rotacion igual.',
+    lotteryRuleWithY: 'Si Y esta activado, sorteo cuando participantes > X y < Y, o cuando participantes > Y.',
+    paymentLinksTitle: 'Enlaces de pago',
+    addPaymentLink: 'Agregar enlace de pago',
+    paymentLinkUrl: 'URL del enlace de pago',
+    paymentLinkLabel: 'Etiqueta del enlace (ej. Bit, PayPal)',
+    deletePaymentLink: 'Eliminar enlace',
+    noPaymentLinks: 'Sin enlaces de pago aun',
   },
   ru: {
     language: 'Yazyk',
@@ -852,6 +969,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     mainTab: 'Igry i registraciya',
     rulesTab: 'Kak rabotaet registraciya',
     lotteryTab: 'Rotaciya loterei',
+    instructionsTab: 'Instrukciya',
+    registrationGuideTitle: 'Kak zaregistrirovatsya',
+    registrationGuideIntro: 'Sleduite etim shagom dlya bystroi registracii:',
+    registrationGuideStep1: 'Snachala vyberite yazyk.',
+    registrationGuideStep2: 'Vyberite rol: Admin ili Igrok.',
+    registrationGuideStep3: 'Admin sozdaiot gruppu, igrok vybirayet suschestvuyuschuyu gruppu.',
+    registrationGuideStep4: 'Vvedite imya i parol, zatem nazhmite zavershit nastroiku.',
+    registrationGuideClose: 'Zakryt instrukciyu',
     adminLogout: 'Vyiti iz admin',
     signedInSession: 'Aktivnaya sessiya',
     signOut: 'Vyiti',
@@ -948,8 +1073,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     lotteryDisabledRule: 'Esli zherebyevka otklyuchena, lishnie ne razygyrivayutsya.',
     upcomingGame: 'Blizhayshaya igra',
     noUpcomingLotteryGame: 'Net blizhayshei igry dlya pokazha zherebyevki.',
-    lotteryRuleNoY: 'Esli Y otklyuchen i igrokov > X, zherebyevka sredi vseh registrirovannyh s ravnoi rotaciei.',
-    lotteryRuleWithY: 'Esli Y vklyuchen, zherebyevka pri igrokah > X i < Y ili pri igrokah > Y.',
+    lotteryRuleNoY: 'Esli Y otklyuchen i uchastnikov > X, zherebyevka sredi vseh registrirovannyh s ravnoi rotaciei.',
+    lotteryRuleWithY: 'Esli Y vklyuchen, zherebyevka pri uchastnikah > X i < Y ili pri uchastnikah > Y.',
+    paymentLinksTitle: 'Ssylki na oplatu',
+    addPaymentLink: 'Dobavit ssylku',
+    paymentLinkUrl: 'URL ssylki na oplatu',
+    paymentLinkLabel: 'Metka ssylki (napr. Bit, PayPal)',
+    deletePaymentLink: 'Udalit ssylku',
+    noPaymentLinks: 'Net ssylok poka',
   },
   uk: {
     language: 'Mova',
@@ -975,6 +1106,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     mainTab: 'Igry ta reiestraciya',
     rulesTab: 'Yak pracyuie reiestraciya',
     lotteryTab: 'Rotaciya zherebkuvannya',
+    instructionsTab: 'Instrukciya',
+    registrationGuideTitle: 'Yak zareiestruvatysya',
+    registrationGuideIntro: 'Vykonai ce krok za krokom dlya shvydkoi reiestracii:',
+    registrationGuideStep1: 'Spershu obery movu.',
+    registrationGuideStep2: 'Obery rol: Admin abo Hravets.',
+    registrationGuideStep3: 'Admin stvoryuie hrupu, hravets obyraye isnuyuchu hrupu.',
+    registrationGuideStep4: 'Vvedy login i parol, potim natysny zavershyty nalashtuvannya.',
+    registrationGuideClose: 'Zakryty instrukciyu',
     adminLogout: 'Vyity z admin',
     signedInSession: 'Aktyvna sesiia',
     signOut: 'Vyity',
@@ -1069,10 +1208,16 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     rejectPlayerFailed: 'Ne vdaloся vidkhylyty hravcya.',
     blockPlayerFailed: 'Ne vdaloся zablokvuvaty hravcya.',
     lotteryDisabledRule: 'Yakshcho zherebkuvannya vymkneno, dlya nadlyshku ne vykonuyetsya rozigrash.',
-    upcomingGame: 'Nablyzhcha hra',
-    noUpcomingLotteryGame: 'Nemaie nablyzhchoi hry dlya pokazhu zherebkuvannya.',
-    lotteryRuleNoY: 'Yakshcho Y vymkneno ta hravciv > X, zherebkuvannya sered usih zareiestrovanyh z rivnoyu rotaciyeyu.',
-    lotteryRuleWithY: 'Yakshcho Y увimkneno, zherebkuvannya pry hravcyah > X i < Y, abo pry hravcyah > Y.',
+    upcomingGame: 'Nablyzhcha podiya',
+    noUpcomingLotteryGame: 'Nemaie nablyzhchoi podiyi dlya pokazhu zherebkuvannya.',
+    lotteryRuleNoY: 'Yakshcho Y vymkneno ta uchasnykiv > X, zherebkuvannya sered usih zareiestrovanyh z rivnoyu rotaciyeyu.',
+    lotteryRuleWithY: 'Yakshcho Y vimkneno, zherebkuvannya pry uchasnykyh > X i < Y, abo pry uchasnykyh > Y.',
+    paymentLinksTitle: 'Posilannya na oplatu',
+    addPaymentLink: 'Dodaty posilannya',
+    paymentLinkUrl: 'URL posilannya na oplatu',
+    paymentLinkLabel: 'Marka posilannya (napr. Bit, PayPal)',
+    deletePaymentLink: 'Vydalyty posilannya',
+    noPaymentLinks: 'Posilannya poki scho nemaye',
   },
   hi: {
     language: 'Bhasha',
@@ -1098,6 +1243,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     mainTab: 'Games aur registration',
     rulesTab: 'Registration kaise kaam karta hai',
     lotteryTab: 'Lottery rotation',
+    instructionsTab: 'Registration guide',
+    registrationGuideTitle: 'Registration kaise karein',
+    registrationGuideIntro: 'Registration jaldi complete karne ke liye ye steps follow karein:',
+    registrationGuideStep1: 'Sabse pehle language choose karein.',
+    registrationGuideStep2: 'Apna role select karein: Admin ya Player.',
+    registrationGuideStep3: 'Admin naya group banaye, Player existing group choose kare.',
+    registrationGuideStep4: 'Username aur password dal kar Finish setup dabayein.',
+    registrationGuideClose: 'Guide band karein',
     adminLogout: 'Admin se bahar niklen',
     signedInSession: 'Sakriya session',
     signOut: 'Sign out',
@@ -1192,10 +1345,16 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     rejectPlayerFailed: 'Player ko atkarne me nakam.',
     blockPlayerFailed: 'Player ko band karne me nakam.',
     lotteryDisabledRule: 'Lottery band hone par overflow lottery apply nahin hoti.',
-    upcomingGame: 'Aane wala game',
-    noUpcomingLotteryGame: 'Lottery dikhane ke liye koi aane wala game nahin hai.',
-    lotteryRuleNoY: 'Agar Y band hai aur players > X, to sab registered players me equal rotation lottery chalegi.',
-    lotteryRuleWithY: 'Agar Y on hai, to lottery players > X aur < Y par, ya players > Y par chalegi.',
+    upcomingGame: 'Aane wala event',
+    noUpcomingLotteryGame: 'Lottery dikhane ke liye koi aane wala event nahin hai.',
+    lotteryRuleNoY: 'Agar Y band hai aur participants > X, to sab registered members me equal rotation lottery chalegi.',
+    lotteryRuleWithY: 'Agar Y on hai, to lottery participants > X aur < Y par, ya participants > Y par chalegi.',
+    paymentLinksTitle: 'Payment links',
+    addPaymentLink: 'Add payment link',
+    paymentLinkUrl: 'Payment link URL',
+    paymentLinkLabel: 'Link label (e.g. Bit, PayPal)',
+    deletePaymentLink: 'Remove link',
+    noPaymentLinks: 'No payment links yet',
   },
   zh: {
     language: 'Language',
@@ -1221,6 +1380,14 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     mainTab: 'Games and registration',
     rulesTab: 'How registration works',
     lotteryTab: 'Lottery rotation',
+    instructionsTab: 'Registration guide',
+    registrationGuideTitle: 'How to register',
+    registrationGuideIntro: 'Follow these steps to complete registration quickly:',
+    registrationGuideStep1: 'Choose your language first.',
+    registrationGuideStep2: 'Select your role: Admin or Player.',
+    registrationGuideStep3: 'If you are Admin create a group, if you are Player choose an existing group.',
+    registrationGuideStep4: 'Enter username and password, then tap Finish setup.',
+    registrationGuideClose: 'Close guide',
     adminLogout: 'Exit admin',
     signedInSession: 'Active session',
     signOut: 'Sign out',
@@ -1315,11 +1482,49 @@ const I18N: Record<AppLanguage, Record<string, string>> = {
     rejectPlayerFailed: 'Failed to reject player.',
     blockPlayerFailed: 'Failed to block player.',
     lotteryDisabledRule: 'When lottery is disabled, no overflow lottery is applied.',
-    upcomingGame: 'Upcoming game',
-    noUpcomingLotteryGame: 'There is no upcoming game to display lottery results.',
-    lotteryRuleNoY: 'If Y is disabled and players > X, lottery runs across all registered players with equal rotation.',
-    lotteryRuleWithY: 'If round 2 is enabled, lottery runs when players exceed round 1 and stay below round 2, or when players exceed round 2.',
+    upcomingGame: 'Upcoming event',
+    noUpcomingLotteryGame: 'There is no upcoming event to display lottery results.',
+    lotteryRuleNoY: 'If Y is disabled and participants > X, lottery runs across all registered participants with equal rotation.',
+    lotteryRuleWithY: 'If round 2 is enabled, lottery runs when participants exceed round 1 and stay below round 2, or when participants exceed round 2.',
+    paymentLinksTitle: 'Payment links',
+    addPaymentLink: 'Add payment link',
+    paymentLinkUrl: 'Payment link URL',
+    paymentLinkLabel: 'Link label (e.g. Bit, PayPal)',
+    deletePaymentLink: 'Remove link',
+    noPaymentLinks: 'No payment links yet',
   },
+}
+
+const GROUP_PASSWORD_SALT_BYTES = 16
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+function createRandomSaltHex(): string {
+  const bytes = new Uint8Array(GROUP_PASSWORD_SALT_BYTES)
+  crypto.getRandomValues(bytes)
+  return bytesToHex(bytes)
+}
+
+async function hashGroupPassword(password: string, saltHex: string): Promise<string> {
+  const payload = new TextEncoder().encode(`${saltHex}:${password}`)
+  const digest = await crypto.subtle.digest('SHA-256', payload)
+  return bytesToHex(new Uint8Array(digest))
+}
+
+async function verifyGroupPassword(group: LocalGroup, plainPassword: string): Promise<boolean> {
+  const password = plainPassword.trim()
+  if (!password) return false
+
+  if (group.groupPasswordHash && group.groupPasswordSalt) {
+    const computedHash = await hashGroupPassword(password, group.groupPasswordSalt)
+    return computedHash === group.groupPasswordHash
+  }
+
+  return String(group.groupPassword || '').trim() === password
 }
 
 function readStoredLanguage(): AppLanguage {
@@ -1367,13 +1572,35 @@ function writeRegistrationProfile(profile: LocalRegistrationProfile) {
   }
 }
 
+function clearRegistrationProfile() {
+  try {
+    localStorage.removeItem(REGISTRATION_PROFILE_KEY)
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+}
+
 function readGroups(): LocalGroup[] {
   try {
     const raw = localStorage.getItem(GROUPS_KEY)
     if (!raw) return []
-    const parsed = JSON.parse(raw) as LocalGroup[]
+    const parsed = JSON.parse(raw) as Array<Partial<LocalGroup>>
     if (!Array.isArray(parsed)) return []
-    return parsed.filter((group) => Boolean(group?.id && group?.name))
+    return parsed
+      .filter((group) => Boolean(group?.id && group?.name))
+      .map((group) => ({
+        id: String(group.id || ''),
+        name: String(group.name || '').trim(),
+        createdBy: String(group.createdBy || '').trim(),
+        groupPasswordHash: String(group.groupPasswordHash || '').trim(),
+        groupPasswordSalt: String(group.groupPasswordSalt || '').trim(),
+        groupPassword: String(group.groupPassword || '').trim(),
+        paymentLinks: Array.isArray(group.paymentLinks) ? group.paymentLinks.map((link: any, index: number) => ({
+          id: link?.id || `link-${Date.now()}-${index}`,
+          url: String(link?.url || '').trim(),
+          label: String(link?.label || '').trim(),
+        })) : [],
+      }))
   } catch (_error) {
     return []
   }
@@ -1639,8 +1866,13 @@ function App() {
   const [selectedGroupId, setSelectedGroupId] = useState<string>(() => readSelectedGroupId())
   const [onboardingRole, setOnboardingRole] = useState<RegistrationRole>('player')
   const [onboardingGroupName, setOnboardingGroupName] = useState('')
-  const [onboardingGroupId, setOnboardingGroupId] = useState('')
+  const [onboardingGroupPassword, setOnboardingGroupPassword] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupPassword, setNewGroupPassword] = useState('')
+  const [editingGroupName, setEditingGroupName] = useState('')
+  const [editingGroupPassword, setEditingGroupPassword] = useState('')
+  const [paymentLinkUrl, setPaymentLinkUrl] = useState('')
+  const [paymentLinkLabel, setPaymentLinkLabel] = useState('')
   const [onboardingUsername, setOnboardingUsername] = useState('')
   const [onboardingPassword, setOnboardingPassword] = useState('')
   const [onboardingPasswordConfirm, setOnboardingPasswordConfirm] = useState('')
@@ -1659,6 +1891,8 @@ function App() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showIntro, setShowIntro] = useState(true)
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(true)
+  const [showRegistrationGuide, setShowRegistrationGuide] = useState(false)
   const [heroTitleWordIndex, setHeroTitleWordIndex] = useState(0)
   const [gameForm, setGameForm] = useState<GameFormState>(() => createEmptyGameForm())
   const [isEditingGame, setIsEditingGame] = useState(false)
@@ -1676,6 +1910,17 @@ function App() {
   const translate = (key: string) => text[key] || I18N.en[key] || key
   const isOnboardingOpen = !registrationProfile || !selectedGroupId
   const currentHeroWord = HERO_TITLE_LOOP_WORDS[heroTitleWordIndex]
+  const registrationGuideSteps = [
+    translate('registrationGuideStep1'),
+    translate('registrationGuideStep2'),
+    translate('registrationGuideStep3'),
+    translate('registrationGuideStep4'),
+  ]
+  const welcomeGuideBullets = [
+    translate('welcomeBullet1'),
+    translate('welcomeBullet2'),
+    translate('welcomeBullet3'),
+  ]
 
   const registeredUserId = useMemo(() => readStoredUserId(), [])
   const hasAdminSession = Boolean(adminToken)
@@ -1703,8 +1948,55 @@ function App() {
   }, [groups])
 
   useEffect(() => {
+    let isCancelled = false
+
+    async function migrateLegacyGroupPasswords() {
+      const hasLegacyPasswords = groups.some((group) => !group.groupPasswordHash && Boolean(group.groupPassword))
+      if (!hasLegacyPasswords) return
+
+      const migrated = await Promise.all(
+        groups.map(async (group) => {
+          if (group.groupPasswordHash || !group.groupPassword) {
+            return group
+          }
+
+          const groupPasswordSalt = createRandomSaltHex()
+          const groupPasswordHash = await hashGroupPassword(group.groupPassword, groupPasswordSalt)
+          return {
+            ...group,
+            groupPasswordHash,
+            groupPasswordSalt,
+            groupPassword: '',
+          }
+        })
+      )
+
+      if (!isCancelled) {
+        setGroups(migrated)
+      }
+    }
+
+    void migrateLegacyGroupPasswords()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [groups])
+
+  useEffect(() => {
     writeGroupConfigs(groupConfigs)
   }, [groupConfigs])
+
+  useEffect(() => {
+    if (!selectedGroup) {
+      setEditingGroupName('')
+      setEditingGroupPassword('')
+      return
+    }
+
+    setEditingGroupName(selectedGroup.name)
+    setEditingGroupPassword('')
+  }, [selectedGroup])
 
   useEffect(() => {
     if (!selectedGroupId && groups.length) {
@@ -1867,26 +2159,36 @@ function App() {
       return
     }
 
-    let nextGroupId = onboardingGroupId
+    let nextGroupId = ''
+    const groupName = onboardingGroupName.trim()
+    const groupPassword = onboardingGroupPassword.trim()
+
+    if (!groupName) {
+      setOnboardingError(`${translate('groupName')} is required.`)
+      return
+    }
 
     if (onboardingRole === 'admin') {
-      const groupName = onboardingGroupName.trim()
-      if (!groupName) {
-        setOnboardingError(`${translate('groupName')} is required.`)
+      if (groupPassword.length < 4) {
+        setOnboardingError(translate('groupPasswordShort'))
         return
       }
 
       const exists = groups.some((group) => group.name.toLowerCase() === groupName.toLowerCase())
       if (exists) {
-        setOnboardingError('Group name already exists.')
+        setOnboardingError(translate('groupNameTaken'))
         return
       }
 
       const groupId = `group-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+      const groupPasswordSalt = createRandomSaltHex()
+      const groupPasswordHash = await hashGroupPassword(groupPassword, groupPasswordSalt)
       const newGroup: LocalGroup = {
         id: groupId,
         name: groupName,
         createdBy: username,
+        groupPasswordHash,
+        groupPasswordSalt,
       }
 
       try {
@@ -1910,10 +2212,24 @@ function App() {
         },
       ])
     } else {
-      if (!nextGroupId) {
-        setOnboardingError(`${translate('chooseGroup')} is required.`)
+      const selectedGroup = groups.find((group) => group.name.toLowerCase() === groupName.toLowerCase())
+      if (!selectedGroup) {
+        setOnboardingError(translate('groupNotFound'))
         return
       }
+
+      if (!groupPassword) {
+        setOnboardingError(`${translate('groupPassword')} is required.`)
+        return
+      }
+
+      const passwordMatches = await verifyGroupPassword(selectedGroup, groupPassword)
+      if (!passwordMatches) {
+        setOnboardingError(translate('groupPasswordIncorrect'))
+        return
+      }
+
+      nextGroupId = selectedGroup.id
     }
 
     const profile: LocalRegistrationProfile = {
@@ -1929,10 +2245,72 @@ function App() {
     setRegistrationProfile(profile)
     setSelectedGroupId(nextGroupId)
     setOnboardingGroupName('')
-    setOnboardingGroupId('')
+    setOnboardingGroupPassword('')
     setOnboardingUsername('')
     setOnboardingPassword('')
     setOnboardingPasswordConfirm('')
+  }
+
+  async function deleteGroupFromOnboarding() {
+    if (onboardingRole !== 'admin') return
+
+    setOnboardingError('')
+    const groupName = onboardingGroupName.trim()
+    const groupPassword = onboardingGroupPassword.trim()
+
+    if (!groupName) {
+      setOnboardingError(`${translate('groupName')} is required.`)
+      return
+    }
+
+    const targetGroup = groups.find((group) => group.name.toLowerCase() === groupName.toLowerCase())
+    if (!targetGroup) {
+      setOnboardingError(translate('groupNotFound'))
+      return
+    }
+
+    if (!groupPassword) {
+      setOnboardingError(`${translate('groupPassword')} is required.`)
+      return
+    }
+
+    const passwordMatches = await verifyGroupPassword(targetGroup, groupPassword)
+    if (!passwordMatches) {
+      setOnboardingError(translate('groupPasswordIncorrect'))
+      return
+    }
+
+    const confirmed = window.confirm(translate('deleteGroupConfirm'))
+    if (!confirmed) return
+
+    const remainingGroups = groups.filter((group) => group.id !== targetGroup.id)
+    const fallbackGroupId = remainingGroups[0]?.id || ''
+
+    setGroups(remainingGroups)
+    setGroupConfigs((current) => current.filter((entry) => entry.groupId !== targetGroup.id))
+
+    if (registrationProfile?.groupId === targetGroup.id) {
+      if (!fallbackGroupId) {
+        clearRegistrationProfile()
+        setRegistrationProfile(null)
+      } else {
+        const nextProfile: LocalRegistrationProfile = {
+          ...registrationProfile,
+          groupId: fallbackGroupId,
+        }
+        writeRegistrationProfile(nextProfile)
+        setRegistrationProfile(nextProfile)
+      }
+    }
+
+    if (selectedGroupId === targetGroup.id) {
+      setSelectedGroupId(fallbackGroupId)
+    }
+
+    setOnboardingGroupName('')
+    setOnboardingGroupPassword('')
+    setSuccess(translate('groupDeleted'))
+    setError('')
   }
 
   function saveCurrentGameType() {
@@ -2014,7 +2392,7 @@ function App() {
     setSelectedGameTypeId(next.id)
   }
 
-  function addGroupByAdmin() {
+  async function addGroupByAdmin() {
     if (!hasAdminSession) return
     if (groups.length >= 3) {
       setError(translate('maxThreeGroups'))
@@ -2022,29 +2400,173 @@ function App() {
     }
 
     const name = newGroupName.trim()
+    const password = newGroupPassword.trim()
     if (!name) {
       setError(`${translate('groupName')} is required.`)
       return
     }
 
+    if (password.length < 4) {
+      setError(translate('groupPasswordShort'))
+      return
+    }
+
     if (groups.some((group) => group.name.toLowerCase() === name.toLowerCase())) {
-      setError('Group name already exists.')
+      setError(translate('groupNameTaken'))
       return
     }
 
     const id = `group-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+    const groupPasswordSalt = createRandomSaltHex()
+    const groupPasswordHash = await hashGroupPassword(password, groupPasswordSalt)
     const group: LocalGroup = {
       id,
       name,
       createdBy: adminUsername || 'admin',
+      groupPasswordHash,
+      groupPasswordSalt,
     }
 
     setGroups((current) => [...current, group])
     setGroupConfigs((current) => [...current, { groupId: id, gameTypes: [createDefaultGameTypeConfig()] }])
     setSelectedGroupId(id)
     setNewGroupName('')
+    setNewGroupPassword('')
     setSuccess('Group created.')
     setError('')
+  }
+
+  async function saveGroupByAdmin() {
+    if (!hasAdminSession || !selectedGroup) return
+
+    const name = editingGroupName.trim()
+    if (!name) {
+      setError(`${translate('groupName')} is required.`)
+      return
+    }
+
+    const isNameTaken = groups.some(
+      (group) => group.id !== selectedGroup.id && group.name.toLowerCase() === name.toLowerCase()
+    )
+    if (isNameTaken) {
+      setError(translate('groupNameTaken'))
+      return
+    }
+
+    const nextPassword = editingGroupPassword.trim()
+    if (nextPassword && nextPassword.length < 4) {
+      setError(translate('groupPasswordShort'))
+      return
+    }
+
+    let nextPasswordHash = selectedGroup.groupPasswordHash
+    let nextPasswordSalt = selectedGroup.groupPasswordSalt
+    if (nextPassword) {
+      nextPasswordSalt = createRandomSaltHex()
+      nextPasswordHash = await hashGroupPassword(nextPassword, nextPasswordSalt)
+    }
+
+    setGroups((current) =>
+      current.map((group) =>
+        group.id === selectedGroup.id
+          ? {
+              ...group,
+              name,
+              groupPasswordHash: nextPasswordHash,
+              groupPasswordSalt: nextPasswordSalt,
+              groupPassword: '',
+            }
+          : group
+      )
+    )
+
+    setEditingGroupPassword('')
+    setSuccess(translate('groupUpdated'))
+    setError('')
+  }
+
+  function deleteGroupByAdmin() {
+    if (!hasAdminSession || !selectedGroup) return
+
+    const confirmed = window.confirm(translate('deleteGroupConfirm'))
+    if (!confirmed) return
+
+    const remainingGroups = groups.filter((group) => group.id !== selectedGroup.id)
+    const fallbackGroupId = remainingGroups[0]?.id || ''
+
+    setGroups(remainingGroups)
+    setGroupConfigs((current) => current.filter((entry) => entry.groupId !== selectedGroup.id))
+
+    if (registrationProfile?.groupId === selectedGroup.id) {
+      if (!fallbackGroupId) {
+        clearRegistrationProfile()
+        setRegistrationProfile(null)
+      } else {
+        const nextProfile: LocalRegistrationProfile = {
+          ...registrationProfile,
+          groupId: fallbackGroupId,
+        }
+        writeRegistrationProfile(nextProfile)
+        setRegistrationProfile(nextProfile)
+      }
+    }
+
+    setSelectedGroupId(fallbackGroupId)
+    setSuccess(translate('groupDeleted'))
+    setError('')
+  }
+
+  function addPaymentLink() {
+    if (!hasAdminSession || !selectedGroup) return
+
+    const url = paymentLinkUrl.trim()
+    const label = paymentLinkLabel.trim()
+
+    if (!url) {
+      setError(translate('paymentLinkUrl') + ' is required.')
+      return
+    }
+
+    if (!label) {
+      setError(translate('paymentLinkLabel') + ' is required.')
+      return
+    }
+
+    try {
+      new URL(url)
+    } catch (_e) {
+      setError('Invalid URL format.')
+      return
+    }
+
+    setGroups((current) =>
+      current.map((group) => {
+        if (group.id !== selectedGroup.id) return group
+        const links = group.paymentLinks || []
+        const newLink: LocalGroupPaymentLink = {
+          id: `link-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+          url,
+          label,
+        }
+        return { ...group, paymentLinks: [...links, newLink] }
+      }),
+    )
+
+    setPaymentLinkUrl('')
+    setPaymentLinkLabel('')
+    setSuccess('Payment link added.')
+    setError('')
+  }
+
+  function deletePaymentLink(linkId: string) {
+    if (!hasAdminSession || !selectedGroup) return
+
+    setGroups((current) =>
+      current.map((group) => {
+        if (group.id !== selectedGroup.id) return group
+        return { ...group, paymentLinks: (group.paymentLinks || []).filter((link) => link.id !== linkId) }
+      }),
+    )
   }
 
   async function loginAdmin(event: FormEvent) {
@@ -2345,6 +2867,51 @@ function App() {
     <main className="app-shell">
       <IntroSplash visible={showIntro} />
 
+      {showWelcomeGuide && isOnboardingOpen && !showIntro && (
+        <section className="instructions-overlay">
+          <article className="instructions-card">
+            <h2>{translate('welcomeTitle')}</h2>
+            <p className="muted">{translate('welcomeIntro')}</p>
+            <ul className="instructions-list">
+              {welcomeGuideBullets.map((item, index) => (
+                <li key={`welcome-guide-${index}`}>{item}</li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="cta cta-primary"
+              onClick={() => {
+                setShowWelcomeGuide(false)
+                setShowRegistrationGuide(true)
+              }}
+            >
+              {translate('welcomeAcknowledge')}
+            </button>
+          </article>
+        </section>
+      )}
+
+      {!showWelcomeGuide && showRegistrationGuide && isOnboardingOpen && !showIntro && (
+        <section className="instructions-overlay">
+          <article className="instructions-card">
+            <h2>{translate('registrationGuideTitle')}</h2>
+            <p className="muted">{translate('registrationGuideIntro')}</p>
+            <ol className="instructions-list">
+              {registrationGuideSteps.map((step, index) => (
+                <li key={`guide-step-${index}`}>{step}</li>
+              ))}
+            </ol>
+            <button
+              type="button"
+              className="cta cta-primary"
+              onClick={() => setShowRegistrationGuide(false)}
+            >
+              {translate('registrationGuideClose')}
+            </button>
+          </article>
+        </section>
+      )}
+
       {isOnboardingOpen && (
         <section className="onboarding-overlay">
           <form className="onboarding-card" onSubmit={completeInitialSetup}>
@@ -2386,32 +2953,32 @@ function App() {
 
             <p className="onboarding-label">{translate('createGroupHint')}</p>
 
-            {onboardingRole === 'admin' ? (
-              <input
-                required
-                className="text-input"
-                placeholder={translate('groupName')}
-                value={onboardingGroupName}
-                onChange={(event) => setOnboardingGroupName(event.target.value)}
-              />
-            ) : (
-              <select
-                required
-                className="select-input"
-                value={onboardingGroupId}
-                onChange={(event) => setOnboardingGroupId(event.target.value)}
-                disabled={!groups.length}
-              >
-                <option value="">{translate('chooseGroup')}</option>
-                {groups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            <input
+              required
+              className="text-input"
+              placeholder={translate('groupName')}
+              value={onboardingGroupName}
+              onChange={(event) => setOnboardingGroupName(event.target.value)}
+            />
 
-            {onboardingRole === 'player' && !groups.length && <p className="message message-error">{translate('noGroupsYet')}</p>}
+            <input
+              required
+              type="password"
+              className="text-input"
+              placeholder={translate('groupPassword')}
+              value={onboardingGroupPassword}
+              onChange={(event) => setOnboardingGroupPassword(event.target.value)}
+            />
+
+            {onboardingRole === 'admin' && groups.length > 0 && (
+              <button
+                type="button"
+                className="cta cta-danger"
+                onClick={() => void deleteGroupFromOnboarding()}
+              >
+                {translate('deleteGroup')}
+              </button>
+            )}
 
             <input
               required
@@ -2534,23 +3101,137 @@ function App() {
           </div>
 
           {hasAdminSession && (
-            <div className="row" style={{ marginTop: 10 }}>
-              <input
-                className="text-input"
-                placeholder={translate('groupName')}
-                value={newGroupName}
-                onChange={(event) => setNewGroupName(event.target.value)}
-              />
-              <button
-                type="button"
-                className="cta cta-soft"
-                onClick={addGroupByAdmin}
-                disabled={groups.length >= 3}
-              >
-                {translate('addGroup')}
-              </button>
-              <span className="muted">{translate('maxThreeGroups')}</span>
-            </div>
+            <>
+              <div className="row" style={{ marginTop: 10 }}>
+                <input
+                  className="text-input"
+                  placeholder={translate('groupName')}
+                  value={newGroupName}
+                  onChange={(event) => setNewGroupName(event.target.value)}
+                />
+                <input
+                  type="password"
+                  className="text-input"
+                  placeholder={translate('groupPassword')}
+                  value={newGroupPassword}
+                  onChange={(event) => setNewGroupPassword(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="cta cta-soft"
+                  onClick={() => void addGroupByAdmin()}
+                  disabled={groups.length >= 3}
+                >
+                  {translate('addGroup')}
+                </button>
+                <button
+                  type="button"
+                  className="cta cta-danger"
+                  onClick={deleteGroupByAdmin}
+                  disabled={!selectedGroup}
+                >
+                  {translate('deleteGroup')}
+                </button>
+                <span className="muted">{translate('maxThreeGroups')}</span>
+              </div>
+
+              {selectedGroup && (
+                <>
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <input
+                      className="text-input"
+                      placeholder={translate('groupName')}
+                      value={editingGroupName}
+                      onChange={(event) => setEditingGroupName(event.target.value)}
+                    />
+                    <input
+                      type="password"
+                      className="text-input"
+                      placeholder={translate('newGroupPassword')}
+                      value={editingGroupPassword}
+                      onChange={(event) => setEditingGroupPassword(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="cta cta-soft"
+                      onClick={() => void saveGroupByAdmin()}
+                    >
+                      {translate('editGroup')}
+                    </button>
+                    <button
+                      type="button"
+                      className="cta cta-danger"
+                      onClick={deleteGroupByAdmin}
+                    >
+                      {translate('deleteGroup')}
+                    </button>
+                    <span className="muted">{translate('keepCurrentPassword')}</span>
+                  </div>
+
+                  {/* Payment Links Management */}
+                  <div className="row" style={{ marginTop: 14 }}>
+                  <div className="section-head" style={{ width: '100%', marginBottom: 8 }}>
+                    <p className="section-kicker">{translate('paymentLinksTitle')}</p>
+                  </div>
+                  {selectedGroup.paymentLinks && selectedGroup.paymentLinks.length > 0 ? (
+                    <div style={{ width: '100%', marginBottom: 12 }}>
+                      {selectedGroup.paymentLinks.map((link) => (
+                        <div
+                          key={link.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            backgroundColor: '#f5f5f5',
+                            borderRadius: '4px',
+                            marginBottom: '6px',
+                          }}
+                        >
+                          <div>
+                            <strong>{link.label}</strong>: <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc', textDecoration: 'none' }}>{link.url}</a>
+                          </div>
+                          <button
+                            type="button"
+                            className="cta cta-danger"
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                            onClick={() => deletePaymentLink(link.id)}
+                          >
+                            {translate('deletePaymentLink')}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ width: '100%', marginBottom: 12, color: '#999' }}>
+                      {translate('noPaymentLinks')}
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder={translate('paymentLinkLabel')}
+                    value={paymentLinkLabel}
+                    onChange={(event) => setPaymentLinkLabel(event.target.value)}
+                  />
+                  <input
+                    type="url"
+                    className="text-input"
+                    placeholder={translate('paymentLinkUrl')}
+                    value={paymentLinkUrl}
+                    onChange={(event) => setPaymentLinkUrl(event.target.value)}
+                  />
+                    <button
+                      type="button"
+                      className="cta cta-soft"
+                      onClick={addPaymentLink}
+                    >
+                      {translate('addPaymentLink')}
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
           )}
 
           {selectedGroupConfig?.gameTypes?.length ? (
@@ -2679,6 +3360,13 @@ function App() {
                   onClick={() => setActiveTab('lottery')}
                 >
                   {translate('lotteryTab')}
+                </button>
+                <button
+                  type="button"
+                  className={`tab-btn ${activeTab === 'instructions' ? 'tab-btn-active' : ''}`}
+                  onClick={() => setActiveTab('instructions')}
+                >
+                  {translate('instructionsTab')}
                 </button>
               </div>
             </article>
@@ -3256,6 +3944,29 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              </article>
+            )}
+
+            {activeTab === 'instructions' && (
+              <article className="card full-width info-card">
+                <div className="section-head">
+                  <div>
+                    <p className="section-kicker">Registration Guide</p>
+                    <h2>{translate('registrationGuideTitle')}</h2>
+                  </div>
+                </div>
+                <p className="muted">{translate('welcomeIntro')}</p>
+                <ul className="instructions-list" style={{ marginBottom: 12 }}>
+                  {welcomeGuideBullets.map((item, index) => (
+                    <li key={`instructions-welcome-${index}`}>{item}</li>
+                  ))}
+                </ul>
+                <p className="muted">{translate('registrationGuideIntro')}</p>
+                <ol className="instructions-list">
+                  {registrationGuideSteps.map((step, index) => (
+                    <li key={`instructions-tab-step-${index}`}>{step}</li>
+                  ))}
+                </ol>
               </article>
             )}
           </>
