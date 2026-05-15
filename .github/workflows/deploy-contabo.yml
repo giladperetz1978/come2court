@@ -52,9 +52,7 @@ jobs:
                 apt-get install -y caddy
               fi
               mkdir -p /etc/caddy/Caddyfile.d
-              cat > /etc/caddy/Caddyfile <<'CADDY_MAIN'
-              import /etc/caddy/Caddyfile.d/*.conf
-              CADDY_MAIN
+              printf '%s\n' 'import /etc/caddy/Caddyfile.d/*.conf' > /etc/caddy/Caddyfile
             fi
             mkdir -p ~/apps/come2court
             cd ~/apps/come2court
@@ -115,11 +113,7 @@ jobs:
             pm2 start ~/apps/come2court/backend/server.js --name come2court-backend
             pm2 save
             mkdir -p /etc/caddy/Caddyfile.d
-            cat > /etc/caddy/Caddyfile.d/come2court.conf <<'CADDY_EOF'
-            come2court.com {
-              reverse_proxy 127.0.0.1:8788
-            }
-            CADDY_EOF
+            printf '%s\n' 'come2court.com {' '  reverse_proxy 127.0.0.1:8788' '}' > /etc/caddy/Caddyfile.d/come2court.conf
             systemctl enable caddy || true
             systemctl restart caddy
             HEALTH_OK=0
