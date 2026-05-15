@@ -35,7 +35,7 @@ jobs:
           script: |
             set -e
             export DEBIAN_FRONTEND=noninteractive
-            PUBLIC_APP_DOMAIN=come2court.144.91.96.77.sslip.io
+            PUBLIC_APP_DOMAIN=come2court.com
             if command -v apt-get >/dev/null 2>&1; then
               apt-get update -y
               apt-get install -y curl git ca-certificates gnupg
@@ -53,8 +53,8 @@ jobs:
               fi
               mkdir -p /etc/caddy/Caddyfile.d
               cat > /etc/caddy/Caddyfile <<'CADDY_MAIN'
-import /etc/caddy/Caddyfile.d/*.conf
-CADDY_MAIN
+              import /etc/caddy/Caddyfile.d/*.conf
+              CADDY_MAIN
             fi
             mkdir -p ~/apps/come2court
             cd ~/apps/come2court
@@ -116,10 +116,10 @@ CADDY_MAIN
             pm2 save
             mkdir -p /etc/caddy/Caddyfile.d
             cat > /etc/caddy/Caddyfile.d/come2court.conf <<'CADDY_EOF'
-come2court.144.91.96.77.sslip.io {
-  reverse_proxy 127.0.0.1:8788
-}
-CADDY_EOF
+            come2court.com {
+              reverse_proxy 127.0.0.1:8788
+            }
+            CADDY_EOF
             systemctl enable caddy || true
             systemctl restart caddy
             HEALTH_OK=0
