@@ -1,7 +1,7 @@
 {
-  "name": "ניהול משחק יום שישי 3x3",
-  "short_name": "YomShishi 3x3",
-  "description": "אפליקציית PWA לקבוצה סגורה לניהול משחקי 3x3, הרשמה ורשימות המתנה.",
+  "name": "Fill the Team",
+  "short_name": "Fill the Team",
+  "description": "Fill the Team PWA for managing group activities and registrations.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
